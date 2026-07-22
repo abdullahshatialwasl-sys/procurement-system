@@ -47,6 +47,9 @@ export default function AdminPage() {
   const [customFromDate, setCustomFromDate] = useState("");
   const [customToDate, setCustomToDate] = useState("");
 
+  // حالة الحذف
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
   // ==================================================
   // تنسيق التاريخ
   // ==================================================
@@ -88,6 +91,8 @@ export default function AdminPage() {
 
           if (updated) {
             setSelectedRequest(updated);
+          } else {
+            setSelectedRequest(null);
           }
         }
       }
@@ -95,6 +100,72 @@ export default function AdminPage() {
       console.error(error);
 
       alert("حدث خطأ في جلب الطلبات");
+    }
+  }
+
+  // ==================================================
+  // حذف طلب
+  // ==================================================
+
+  async function deleteRequest(id: number) {
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف الطلب PR-${id}؟\n\nسيتم حذف الطلب وجميع الردود المرتبطة به نهائيًا.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(id);
+
+    try {
+      const response = await fetch(
+        "/api/requests",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.success) {
+        alert(
+          data.message ||
+            "حدث خطأ أثناء حذف الطلب"
+        );
+
+        return;
+      }
+
+      // إزالة الطلب من القائمة مباشرة
+      setRequests((prev) =>
+        prev.filter(
+          (item) => item.id !== id
+        )
+      );
+
+      // إغلاق التفاصيل إذا كان الطلب المحذوف مفتوحًا
+      if (
+        selectedRequest?.id === id
+      ) {
+        setSelectedRequest(null);
+      }
+
+      alert("تم حذف الطلب بنجاح");
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "حدث خطأ أثناء حذف الطلب"
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -289,7 +360,6 @@ export default function AdminPage() {
 
       let matchesDate = true;
 
-      // آخر 7 أيام
       if (dateFilter === "آخر 7 أيام") {
         const fromDate = new Date();
 
@@ -301,7 +371,6 @@ export default function AdminPage() {
           requestDate >= fromDate;
       }
 
-      // آخر 30 يوم
       if (dateFilter === "آخر 30 يوم") {
         const fromDate = new Date();
 
@@ -313,7 +382,6 @@ export default function AdminPage() {
           requestDate >= fromDate;
       }
 
-      // هذا الشهر
       if (dateFilter === "هذا الشهر") {
         matchesDate =
           requestDate.getMonth() ===
@@ -322,7 +390,6 @@ export default function AdminPage() {
             now.getFullYear();
       }
 
-      // الشهر الماضي
       if (dateFilter === "الشهر الماضي") {
         const previousMonth =
           new Date(
@@ -338,7 +405,6 @@ export default function AdminPage() {
             previousMonth.getFullYear();
       }
 
-      // فترة مخصصة
       if (dateFilter === "فترة مخصصة") {
         if (customFromDate) {
           const from =
@@ -446,7 +512,6 @@ export default function AdminPage() {
       "الطلبات الواردة"
     );
 
-    // ضبط عرض الأعمدة
     worksheet["!cols"] = [
       { wch: 15 },
       { wch: 25 },
@@ -477,9 +542,7 @@ export default function AdminPage() {
     >
       <div className="max-w-[1800px] mx-auto">
 
-        {/* ================================
-            Header
-        ================================= */}
+        {/* Header */}
 
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 border">
 
@@ -508,9 +571,7 @@ export default function AdminPage() {
         </div>
 
 
-        {/* ================================
-            الإحصائيات
-        ================================= */}
+        {/* الإحصائيات */}
 
         <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-5 mb-8">
 
@@ -612,9 +673,7 @@ export default function AdminPage() {
         </div>
 
 
-        {/* ================================
-            البحث والفلترة
-        ================================= */}
+        {/* البحث والفلترة */}
 
         <div className="bg-white rounded-2xl shadow-lg border p-6 mb-8">
 
@@ -717,13 +776,8 @@ export default function AdminPage() {
                     e.target.value !==
                     "فترة مخصصة"
                   ) {
-                    setCustomFromDate(
-                      ""
-                    );
-
-                    setCustomToDate(
-                      ""
-                    );
+                    setCustomFromDate("");
+                    setCustomToDate("");
                   }
 
                 }}
@@ -825,9 +879,7 @@ export default function AdminPage() {
         </div>
 
 
-        {/* ================================
-            جدول الطلبات
-        ================================= */}
+        {/* جدول الطلبات */}
 
         <div className="bg-white rounded-2xl shadow-lg border p-6">
 
@@ -837,8 +889,6 @@ export default function AdminPage() {
               الطلبات الواردة
             </h2>
 
-
-            {/* الأزرار - زر Excel واحد فقط */}
 
             <div className="flex gap-3">
 
@@ -868,7 +918,7 @@ export default function AdminPage() {
 
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[1500px] border-collapse">
+            <table className="w-full min-w-[1650px] border-collapse">
 
               <thead>
 
@@ -1050,16 +1100,39 @@ export default function AdminPage() {
 
                         <td className="p-4 border">
 
-                          <button
-                            onClick={() =>
-                              setSelectedRequest(
-                                item
-                              )
-                            }
-                            className="bg-black text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap"
-                          >
-                            عرض التفاصيل
-                          </button>
+                          <div className="flex gap-2 items-center">
+
+                            <button
+                              onClick={() =>
+                                setSelectedRequest(
+                                  item
+                                )
+                              }
+                              className="bg-black text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap"
+                            >
+                              عرض التفاصيل
+                            </button>
+
+
+                            <button
+                              onClick={() =>
+                                deleteRequest(
+                                  item.id
+                                )
+                              }
+                              disabled={
+                                deletingId ===
+                                item.id
+                              }
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap disabled:opacity-50"
+                            >
+                              {deletingId ===
+                              item.id
+                                ? "جاري الحذف..."
+                                : "حذف"}
+                            </button>
+
+                          </div>
 
                         </td>
 
@@ -1092,9 +1165,7 @@ export default function AdminPage() {
         </div>
 
 
-        {/* ================================
-            تفاصيل الطلب
-        ================================= */}
+        {/* تفاصيل الطلب */}
 
         {selectedRequest && (
 

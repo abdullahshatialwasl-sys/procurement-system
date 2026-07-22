@@ -18,7 +18,6 @@ const allowedTypes = [
 
 // ==================================================
 // إنشاء اسم ملف آمن لـ Supabase Storage
-// لا يعتمد على اسم الملف الأصلي
 // ==================================================
 
 function createSafeFileName(
@@ -298,7 +297,6 @@ export async function POST(
         file instanceof File &&
         file.size > 0
       ) {
-        // التأكد من نوع الملف
         if (
           !allowedTypes.includes(
             file.type
@@ -314,20 +312,17 @@ export async function POST(
           );
         }
 
-        // الحصول على امتداد الملف الأصلي
         const extension =
           getFileExtension(
             file.name
           );
 
-        // إنشاء اسم إنجليزي آمن
         const fileName =
           createSafeFileName(
             "request",
             extension
           );
 
-        // رفع الملف
         fileUrl =
           await uploadFile(
             file,
@@ -460,10 +455,6 @@ export async function PATCH(
         );
       }
 
-      // ==================================================
-      // التأكد من وجود الطلب
-      // ==================================================
-
       const existingRequest =
         await prisma.request.findUnique(
           {
@@ -495,14 +486,13 @@ export async function PATCH(
         | null = null;
 
       // ==================================================
-      // رفع ملف الرد إلى Supabase
+      // رفع ملف الرد
       // ==================================================
 
       if (
         file instanceof File &&
         file.size > 0
       ) {
-        // التأكد من نوع الملف
         if (
           !allowedTypes.includes(
             file.type
@@ -518,20 +508,17 @@ export async function PATCH(
           );
         }
 
-        // الحصول على امتداد الملف الأصلي
         const extension =
           getFileExtension(
             file.name
           );
 
-        // إنشاء اسم إنجليزي آمن
         const fileName =
           createSafeFileName(
             `reply-${id}`,
             extension
           );
 
-        // رفع الملف
         replyFileUrl =
           await uploadFile(
             file,
@@ -539,10 +526,6 @@ export async function PATCH(
             fileName
           );
       }
-
-      // ==================================================
-      // التأكد من وجود رد
-      // ==================================================
 
       if (
         !replyText &&
@@ -683,6 +666,107 @@ export async function PATCH(
           error instanceof Error
             ? error.message
             : "خطأ غير معروف في تحديث الطلب",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// ==================================================
+// DELETE
+// حذف طلب
+// ==================================================
+
+export async function DELETE(
+  request: Request
+) {
+  try {
+    const body =
+      await request.json();
+
+    const id =
+      Number(body.id);
+
+    if (
+      !id ||
+      isNaN(id)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "رقم الطلب غير صحيح",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==================================================
+    // التأكد من وجود الطلب
+    // ==================================================
+
+    const existingRequest =
+      await prisma.request.findUnique(
+        {
+          where: {
+            id,
+          },
+
+          include: {
+            replies: true,
+          },
+        }
+      );
+
+    if (!existingRequest) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "الطلب غير موجود",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ==================================================
+    // حذف الردود المرتبطة بالطلب أولاً
+    // ==================================================
+
+    await prisma.requestReply.deleteMany({
+      where: {
+        requestId: id,
+      },
+    });
+
+    // ==================================================
+    // حذف الطلب
+    // ==================================================
+
+    await prisma.request.delete({
+      where: {
+        id,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message:
+        "تم حذف الطلب بنجاح",
+    });
+  } catch (error) {
+    console.error(
+      "DELETE REQUEST ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "حدث خطأ أثناء حذف الطلب",
       },
       { status: 500 }
     );
