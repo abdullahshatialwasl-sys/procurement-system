@@ -24,17 +24,13 @@ export default function Home() {
   const [applicantName, setApplicantName] = useState("");
   const [phone, setPhone] = useState("");
 
-  // ملفات المورد - أكثر من ملف
   const [requestFiles, setRequestFiles] = useState<File[]>([]);
 
-  // رسالة الإرسال
   const [message, setMessage] = useState("");
 
-  // رقم الطلب
   const [submittedRequestNumber, setSubmittedRequestNumber] =
     useState<string | null>(null);
 
-  // البحث عن الطلب
   const [searchNumber, setSearchNumber] = useState("");
 
   const [searchResult, setSearchResult] =
@@ -70,10 +66,6 @@ export default function Home() {
     }
   }
 
-  // ==================================================
-  // إضافة عدة ملفات
-  // ==================================================
-
   function handleFilesChange(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
@@ -93,13 +85,8 @@ export default function Home() {
       ]
     );
 
-    // السماح باختيار نفس الملف مرة أخرى
     e.target.value = "";
   }
-
-  // ==================================================
-  // حذف ملف من القائمة
-  // ==================================================
 
   function removeFile(index: number) {
     setRequestFiles(
@@ -110,10 +97,6 @@ export default function Home() {
         )
     );
   }
-
-  // ==================================================
-  // إرسال الطلب
-  // ==================================================
 
   async function sendRequest() {
     if (!companyName.trim()) {
@@ -178,7 +161,6 @@ export default function Home() {
         phone
       );
 
-      // إضافة جميع الملفات
       requestFiles.forEach(
         (file) => {
           formData.append(
@@ -212,7 +194,6 @@ export default function Home() {
           "تم إرسال الطلب بنجاح"
         );
 
-        // تنظيف الحقول
         setCompanyName("");
         setRequestType([]);
         setDetails("");
@@ -238,10 +219,6 @@ export default function Home() {
       setSending(false);
     }
   }
-
-  // ==================================================
-  // البحث عن طلب
-  // ==================================================
 
   async function searchRequest() {
     if (!searchNumber.trim()) {
@@ -284,32 +261,33 @@ export default function Home() {
   }
 
   const inputStyle =
-    "w-full border-2 border-[#37358A]/40 rounded-xl p-4 text-black font-semibold focus:outline-none focus:border-[#37358A]";
+    "w-full border-2 border-[#37358A]/40 rounded-xl p-3 sm:p-4 text-sm sm:text-base text-black font-semibold focus:outline-none focus:border-[#37358A]";
 
   return (
     <main
       dir="rtl"
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-yellow-50 flex justify-center p-6"
+      className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-yellow-50 flex justify-center p-3 sm:p-5 md:p-6 lg:p-8"
     >
-      <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl p-10 border-2 border-[#37358A]/20 relative">
+
+      <div className="bg-white w-full max-w-6xl rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 border-2 border-[#37358A]/20 relative">
 
         {/* ================================
             الهيدر
         ================================= */}
 
-        <div className="flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center mb-7 sm:mb-10">
 
           <img
             src="/images/nma-logo.jpeg"
             alt="logo"
-            className="w-40 h-40 object-contain"
+            className="w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 lg:w-40 lg:h-40 object-contain"
           />
 
-          <h1 className="text-5xl font-extrabold text-[#26245f] mt-4 text-center">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-[#26245f] mt-3 sm:mt-4 text-center">
             مؤسسة شاطئ الوصل
           </h1>
 
-          <p className="text-2xl font-bold text-[#C91D2D] mt-3 text-center">
+          <p className="text-base sm:text-xl md:text-2xl font-bold text-[#C91D2D] mt-2 sm:mt-3 text-center">
             بوابة الموردين - قسم المشتريات
           </p>
 
@@ -320,13 +298,13 @@ export default function Home() {
             نموذج الطلب
         ================================= */}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 md:gap-6">
 
           {/* اسم الشركة */}
 
           <div className="md:col-span-2">
 
-            <label className="block mb-3 font-bold text-[#37358A]">
+            <label className="block mb-2 sm:mb-3 font-bold text-sm sm:text-base text-[#37358A]">
               اسم الشركة
             </label>
 
@@ -348,17 +326,18 @@ export default function Home() {
 
           <div className="md:col-span-2">
 
-            <label className="block mb-4 font-bold text-xl text-[#37358A]">
+            <label className="block mb-3 sm:mb-4 font-bold text-base sm:text-lg md:text-xl text-[#37358A]">
               الخدمات المطلوبة
             </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
               {requestOptions.map(
                 (item) => (
+
                   <label
                     key={item}
-                    className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-blue-50 text-black font-bold ${
+                    className={`border-2 rounded-xl p-3 sm:p-4 cursor-pointer hover:bg-blue-50 text-black font-bold text-sm sm:text-base transition ${
                       requestType.includes(
                         item
                       )
@@ -377,13 +356,15 @@ export default function Home() {
                           item
                         )
                       }
+                      className="accent-[#37358A]"
                     />
 
-                    <span className="mr-3">
+                    <span className="mr-2 sm:mr-3">
                       {item}
                     </span>
 
                   </label>
+
                 )
               )}
 
@@ -396,7 +377,7 @@ export default function Home() {
 
           <div className="md:col-span-2">
 
-            <label className="block mb-3 font-bold text-[#37358A]">
+            <label className="block mb-2 sm:mb-3 font-bold text-sm sm:text-base text-[#37358A]">
               التفاصيل والملاحظات
             </label>
 
@@ -408,7 +389,7 @@ export default function Home() {
                 )
               }
               placeholder="اكتب تفاصيل الطلب هنا"
-              className="w-full h-40 border-2 border-[#37358A]/40 rounded-xl p-4 text-black font-semibold focus:outline-none focus:border-[#37358A]"
+              className="w-full h-32 sm:h-36 md:h-40 border-2 border-[#37358A]/40 rounded-xl p-3 sm:p-4 text-sm sm:text-base text-black font-semibold focus:outline-none focus:border-[#37358A] resize-y"
             />
 
           </div>
@@ -437,6 +418,7 @@ export default function Home() {
           <div>
 
             <input
+              type="tel"
               value={phone}
               onChange={(e) =>
                 setPhone(
@@ -456,7 +438,7 @@ export default function Home() {
 
           <div className="md:col-span-2">
 
-            <label className="block mb-3 font-bold text-[#37358A]">
+            <label className="block mb-2 sm:mb-3 font-bold text-sm sm:text-base text-[#37358A]">
               إرفاق ملفات مع الطلب
             </label>
 
@@ -467,10 +449,10 @@ export default function Home() {
               onChange={
                 handleFilesChange
               }
-              className="w-full border-2 border-[#37358A]/40 rounded-xl p-3 text-black font-semibold bg-white file:bg-[#37358A] file:text-white file:border-0 file:px-5 file:py-2 file:rounded-lg file:cursor-pointer"
+              className="w-full border-2 border-[#37358A]/40 rounded-xl p-2 sm:p-3 text-xs sm:text-sm md:text-base text-black font-semibold bg-white file:bg-[#37358A] file:text-white file:border-0 file:px-3 sm:file:px-5 file:py-2 file:rounded-lg file:cursor-pointer"
             />
 
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-xs sm:text-sm text-gray-600">
               يمكنك اختيار أكثر من ملف.
               الملفات المسموحة:
               PDF - Excel - JPG - JPEG - PNG
@@ -481,15 +463,15 @@ export default function Home() {
 
             {requestFiles.length > 0 && (
 
-              <div className="mt-5 border-2 border-blue-100 rounded-2xl p-5 bg-blue-50">
+              <div className="mt-4 sm:mt-5 border-2 border-blue-100 rounded-2xl p-3 sm:p-5 bg-blue-50">
 
-                <h3 className="font-bold text-[#37358A] text-lg mb-4">
+                <h3 className="font-bold text-[#37358A] text-base sm:text-lg mb-3 sm:mb-4">
                   الملفات المختارة (
                   {requestFiles.length}
                   )
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
 
                   {requestFiles.map(
                     (
@@ -499,16 +481,16 @@ export default function Home() {
 
                       <div
                         key={`${file.name}-${index}`}
-                        className="flex items-center justify-between gap-4 bg-white border rounded-xl p-4"
+                        className="flex items-center justify-between gap-2 sm:gap-4 bg-white border rounded-xl p-3 sm:p-4"
                       >
 
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
 
-                          <span className="text-xl">
+                          <span className="text-lg sm:text-xl shrink-0">
                             📎
                           </span>
 
-                          <span className="font-semibold text-black truncate">
+                          <span className="font-semibold text-black text-xs sm:text-sm md:text-base truncate">
                             {file.name}
                           </span>
 
@@ -521,7 +503,7 @@ export default function Home() {
                               index
                             )
                           }
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap"
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded-lg font-bold text-xs sm:text-sm whitespace-nowrap shrink-0"
                         >
                           حذف
                         </button>
@@ -549,7 +531,7 @@ export default function Home() {
                 sendRequest
               }
               disabled={sending}
-              className="w-full bg-[#37358A] text-white rounded-xl p-5 text-xl font-extrabold shadow-xl hover:bg-[#2d2b70] transition disabled:opacity-50"
+              className="w-full bg-[#37358A] text-white rounded-xl p-4 sm:p-5 text-base sm:text-lg md:text-xl font-extrabold shadow-xl hover:bg-[#2d2b70] transition disabled:opacity-50"
             >
               {sending
                 ? "جاري إرسال الطلب..."
@@ -565,7 +547,7 @@ export default function Home() {
 
             <div className="md:col-span-2">
 
-              <p className="text-center text-xl font-bold text-[#26245f]">
+              <p className="text-center text-base sm:text-lg md:text-xl font-bold text-[#26245f]">
                 {message}
               </p>
 
@@ -580,23 +562,23 @@ export default function Home() {
 
           {submittedRequestNumber && (
 
-            <div className="md:col-span-2 bg-green-50 border-2 border-green-500 rounded-2xl p-6 text-center">
+            <div className="md:col-span-2 bg-green-50 border-2 border-green-500 rounded-2xl p-4 sm:p-6 text-center">
 
-              <p className="text-lg font-bold text-green-800">
+              <p className="text-base sm:text-lg font-bold text-green-800">
                 تم استلام طلبك بنجاح ✅
               </p>
 
-              <p className="text-3xl font-extrabold text-[#37358A] mt-3 select-all">
+              <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#37358A] mt-3 break-words">
                 رقم الطلب:
                 {" "}
                 {submittedRequestNumber}
               </p>
 
-              <p className="text-lg font-bold text-gray-800 mt-5 leading-8">
+              <p className="text-sm sm:text-base md:text-lg font-bold text-gray-800 mt-4 sm:mt-5 leading-7 sm:leading-8">
                 سيتم مراجعة طلبك والرد عليك خلال مدة تتراوح من 6 إلى 24 ساعة.
               </p>
 
-              <p className="text-sm text-gray-700 mt-3">
+              <p className="text-xs sm:text-sm text-gray-700 mt-3 leading-6">
                 يرجى الاحتفاظ برقم الطلب لمتابعة حالة الطلب والاطلاع على رد قسم المشتريات.
               </p>
 
@@ -609,9 +591,9 @@ export default function Home() {
               متابعة الطلب
           ================================= */}
 
-          <div className="md:col-span-2 mt-10 border-2 border-[#37358A]/20 rounded-2xl p-6">
+          <div className="md:col-span-2 mt-6 sm:mt-8 md:mt-10 border-2 border-[#37358A]/20 rounded-2xl p-4 sm:p-5 md:p-6">
 
-            <h2 className="text-3xl font-bold text-[#37358A] mb-5">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#37358A] mb-4 sm:mb-5">
               متابعة الطلب
             </h2>
 
@@ -630,24 +612,26 @@ export default function Home() {
               onClick={
                 searchRequest
               }
-              className="mt-4 w-full bg-[#37358A] text-white rounded-xl p-4 font-bold text-lg"
+              className="mt-3 sm:mt-4 w-full bg-[#37358A] text-white rounded-xl p-3 sm:p-4 font-bold text-base sm:text-lg"
             >
               بحث عن الطلب
             </button>
 
 
+            {/* نتيجة البحث */}
+
             {searchResult && (
 
-              <div className="mt-6 bg-blue-50 rounded-xl p-6 border text-black">
+              <div className="mt-5 sm:mt-6 bg-blue-50 rounded-xl p-4 sm:p-6 border text-black overflow-hidden">
 
-                <p className="font-bold text-lg">
+                <p className="font-bold text-base sm:text-lg break-words">
                   رقم الطلب:
                   {" "}
                   PR-
                   {searchResult.id}
                 </p>
 
-                <p className="mt-3 font-bold">
+                <p className="mt-3 font-bold text-sm sm:text-base">
                   حالة الطلب:
                   {" "}
                   {searchResult.status}
@@ -656,13 +640,13 @@ export default function Home() {
 
                 {/* رد قسم المشتريات */}
 
-                <div className="mt-5 bg-white rounded-xl p-5 border">
+                <div className="mt-4 sm:mt-5 bg-white rounded-xl p-4 sm:p-5 border">
 
-                  <h3 className="font-bold text-[#37358A] text-lg">
+                  <h3 className="font-bold text-[#37358A] text-base sm:text-lg">
                     رد قسم المشتريات
                   </h3>
 
-                  <p className="mt-3 whitespace-pre-wrap">
+                  <p className="mt-3 whitespace-pre-wrap text-sm sm:text-base leading-7 break-words">
                     {searchResult.reply ||
                       "لا يوجد رد حالياً"}
                   </p>
@@ -674,9 +658,9 @@ export default function Home() {
 
                 {searchResult.replyFileUrl && (
 
-                  <div className="mt-5 bg-white rounded-xl p-5 border">
+                  <div className="mt-4 sm:mt-5 bg-white rounded-xl p-4 sm:p-5 border">
 
-                    <h3 className="font-bold text-[#37358A]">
+                    <h3 className="font-bold text-[#37358A] text-sm sm:text-base">
                       مرفق قسم المشتريات
                     </h3>
 
@@ -686,7 +670,7 @@ export default function Home() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block mt-3 text-blue-600 font-bold underline"
+                      className="block mt-3 text-blue-600 font-bold underline text-sm sm:text-base break-all"
                     >
                       فتح الملف المرفق
                     </a>
@@ -702,9 +686,9 @@ export default function Home() {
                   searchResult.attachments.length >
                     0 && (
 
-                    <div className="mt-5 bg-white rounded-xl p-5 border">
+                    <div className="mt-4 sm:mt-5 bg-white rounded-xl p-4 sm:p-5 border">
 
-                      <h3 className="font-bold text-[#37358A]">
+                      <h3 className="font-bold text-[#37358A] text-sm sm:text-base">
                         المرفقات المرسلة
                       </h3>
 
@@ -722,7 +706,7 @@ export default function Home() {
                               }
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="block text-blue-600 font-bold underline"
+                              className="block text-blue-600 font-bold underline text-sm sm:text-base break-all"
                             >
                               📎{" "}
                               {
