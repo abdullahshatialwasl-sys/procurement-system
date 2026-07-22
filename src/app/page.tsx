@@ -49,9 +49,7 @@ export default function Home() {
   function toggleRequest(item: string) {
     if (requestType.includes(item)) {
       setRequestType(
-        requestType.filter(
-          (x) => x !== item
-        )
+        requestType.filter((x) => x !== item)
       );
     } else {
       setRequestType([
@@ -61,39 +59,42 @@ export default function Home() {
     }
   }
 
-  // ==================================================
-  // رقم الجوال
-  // أرقام فقط - حد أقصى 10 أرقام
-  // ==================================================
-
+  // رقم الجوال: أرقام فقط وحد أقصى 10 أرقام
   function handlePhoneChange(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
-    const value = e.target.value;
-
-    // السماح بالأرقام فقط
-    const numbersOnly = value.replace(
+    const numbersOnly = e.target.value.replace(
       /[^0-9]/g,
       ""
     );
 
-    // منع إدخال أكثر من 10 أرقام
     if (numbersOnly.length <= 10) {
       setPhone(numbersOnly);
     }
   }
 
-  // ==================================================
-  // الملفات
-  // ==================================================
+  // اسم مقدم الطلب: حد أقصى 5 كلمات
+  function handleApplicantNameChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const value = e.target.value;
+
+    const words = value
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (words.length <= 5) {
+      setApplicantName(value);
+    }
+  }
 
   function handleFilesChange(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
-    const selectedFiles =
-      Array.from(
-        e.target.files || []
-      );
+    const selectedFiles = Array.from(
+      e.target.files || []
+    );
 
     if (selectedFiles.length === 0) {
       return;
@@ -119,23 +120,22 @@ export default function Home() {
     );
   }
 
-  // ==================================================
-  // إرسال الطلب
-  // ==================================================
-
   async function sendRequest() {
     if (!companyName.trim()) {
+      alert("يرجى كتابة اسم الشركة");
+      return;
+    }
+
+    if (requestType.length === 0) {
       alert(
-        "يرجى كتابة اسم الشركة"
+        "يرجى اختيار خدمة واحدة على الأقل"
       );
       return;
     }
 
-    if (
-      requestType.length === 0
-    ) {
+    if (!details.trim()) {
       alert(
-        "يرجى اختيار خدمة واحدة على الأقل"
+        "يرجى كتابة التفاصيل والملاحظات"
       );
       return;
     }
@@ -147,14 +147,23 @@ export default function Home() {
       return;
     }
 
-    if (!phone.trim()) {
+    const applicantWords = applicantName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (applicantWords.length > 5) {
       alert(
-        "يرجى كتابة رقم الجوال"
+        "اسم مقدم الطلب يجب ألا يتجاوز 5 كلمات"
       );
       return;
     }
 
-    // يجب أن يكون الرقم 10 أرقام بالضبط
+    if (!phone.trim()) {
+      alert("يرجى كتابة رقم الجوال");
+      return;
+    }
+
     if (phone.length !== 10) {
       alert(
         "يرجى كتابة رقم جوال سعودي صحيح مكون من 10 أرقام"
@@ -162,7 +171,6 @@ export default function Home() {
       return;
     }
 
-    // يجب أن يبدأ الرقم بـ 05
     if (!phone.startsWith("05")) {
       alert(
         "يرجى كتابة رقم جوال سعودي صحيح يبدأ بـ 05"
@@ -174,8 +182,7 @@ export default function Home() {
     setMessage("");
 
     try {
-      const formData =
-        new FormData();
+      const formData = new FormData();
 
       formData.append(
         "companyName",
@@ -211,14 +218,13 @@ export default function Home() {
         }
       );
 
-      const response =
-        await fetch(
-          "/api/requests",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
+      const response = await fetch(
+        "/api/requests",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data =
         await response.json();
@@ -258,10 +264,6 @@ export default function Home() {
     }
   }
 
-  // ==================================================
-  // البحث عن الطلب
-  // ==================================================
-
   async function searchRequest() {
     if (!searchNumber.trim()) {
       alert(
@@ -271,10 +273,15 @@ export default function Home() {
     }
 
     try {
+      const cleanSearchNumber =
+        searchNumber
+          .trim()
+          .replace(/\s+/g, "");
+
       const response =
         await fetch(
           `/api/requests?number=${encodeURIComponent(
-            searchNumber
+            cleanSearchNumber
           )}`
         );
 
@@ -311,9 +318,7 @@ export default function Home() {
     >
       <div className="bg-white w-full max-w-6xl rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 border-2 border-[#37358A]/20 relative">
 
-        {/* ================================
-            الهيدر
-        ================================= */}
+        {/* الهيدر */}
 
         <div className="flex flex-col items-center mb-7 sm:mb-10">
 
@@ -333,9 +338,7 @@ export default function Home() {
 
         </div>
 
-        {/* ================================
-            نموذج الطلب
-        ================================= */}
+        {/* نموذج الطلب */}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 md:gap-6">
 
@@ -437,20 +440,17 @@ export default function Home() {
 
             <input
               value={applicantName}
-              onChange={(e) =>
-                setApplicantName(
-                  e.target.value
-                )
+              onChange={
+                handleApplicantNameChange
               }
               placeholder="اسم مقدم الطلب"
+              maxLength={60}
               className={inputStyle}
             />
 
           </div>
 
-          {/* ================================
-              رقم الجوال
-          ================================= */}
+          {/* رقم الجوال */}
 
           <div>
 
@@ -469,9 +469,7 @@ export default function Home() {
 
           </div>
 
-          {/* ================================
-              مرفقات المورد
-          ================================= */}
+          {/* المرفقات */}
 
           <div className="md:col-span-2">
 
@@ -494,8 +492,6 @@ export default function Home() {
               الملفات المسموحة:
               PDF - Excel - JPG - JPEG - PNG
             </p>
-
-            {/* قائمة الملفات */}
 
             {requestFiles.length > 0 && (
 
@@ -589,9 +585,7 @@ export default function Home() {
 
           )}
 
-          {/* ================================
-              رقم الطلب ورسالة التأكيد
-          ================================= */}
+          {/* رقم الطلب */}
 
           {submittedRequestNumber && (
 
@@ -645,9 +639,7 @@ export default function Home() {
 
           )}
 
-          {/* ================================
-              متابعة الطلب
-          ================================= */}
+          {/* متابعة الطلب */}
 
           <div className="md:col-span-2 mt-6 sm:mt-8 md:mt-10 border-2 border-[#37358A]/20 rounded-2xl p-4 sm:p-5 md:p-6">
 
@@ -660,9 +652,12 @@ export default function Home() {
               onChange={(e) =>
                 setSearchNumber(
                   e.target.value
+                    .replace(/\s+/g, "")
+                    .slice(0, 20)
                 )
               }
-              placeholder="مثال PR-1"
+              maxLength={20}
+              placeholder="رقم الطلب"
               className={inputStyle}
             />
 
