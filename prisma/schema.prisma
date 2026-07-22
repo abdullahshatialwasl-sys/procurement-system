@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Request {
+  id            Int     @id @default(autoincrement())
+  companyName   String
+  requestType   String
+  priority      String  @default("عادي")
+  referenceNo   String?
+  details       String?
+  applicantName String
+  phone         String
+  fileUrl       String?
+  status        String  @default("جديد")
+
+  // آخر رد
+  reply        String?
+  replyFileUrl String?
+  replyAt      DateTime?
+
+  // جميع الردود السابقة
+  replies RequestReply[]
+
+  // تاريخ إنشاء الطلب
+  createdAt DateTime @default(now())
+}
+
+model RequestReply {
+  id        Int @id @default(autoincrement())
+  requestId Int
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  reply     String?
+  fileUrl   String?
+  createdAt DateTime @default(now())
+}
