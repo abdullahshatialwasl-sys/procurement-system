@@ -1,7 +1,81 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import fs from "fs";
-import path from "path";
+import { supabase } from "@/lib/supabase";
+
+// ==================================================
+// إعدادات الملفات
+// ==================================================
+
+const BUCKET_NAME = "uploads";
+
+const allowedTypes = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "image/jpeg",
+  "image/png",
+];
+
+// ==================================================
+// تنظيف اسم الملف
+// ==================================================
+
+function sanitizeFileName(fileName: string) {
+  return fileName
+    .replace(
+      /[^a-zA-Z0-9.\u0600-\u06FF_-]/g,
+      "_"
+    )
+    .replace(/_+/g, "_");
+}
+
+// ==================================================
+// رفع الملف إلى Supabase Storage
+// ==================================================
+
+async function uploadFile(
+  file: File,
+  folder: string,
+  fileName: string
+) {
+  const bytes = await file.arrayBuffer();
+
+  const filePath = `${folder}/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(
+      filePath,
+      Buffer.from(bytes),
+      {
+        contentType:
+          file.type ||
+          "application/octet-stream",
+
+        upsert: false,
+      }
+    );
+
+  if (error) {
+    console.error(
+      "SUPABASE STORAGE UPLOAD ERROR:",
+      error
+    );
+
+    throw new Error(
+      `فشل رفع الملف: ${error.message}`
+    );
+  }
+
+  const {
+    data: publicUrlData,
+  } =
+    supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(filePath);
+
+  return publicUrlData.publicUrl;
+}
 
 // ==================================================
 // GET
@@ -9,9 +83,11 @@ import path from "path";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } =
+      new URL(request.url);
 
-    const number = searchParams.get("number");
+    const number =
+      searchParams.get("number");
 
     // ==================================================
     // جلب طلب محدد
@@ -19,14 +95,17 @@ export async function GET(request: Request) {
 
     if (number) {
       const id = Number(
-        number.replace("PR-", "").trim()
+        number
+          .replace("PR-", "")
+          .trim()
       );
 
       if (isNaN(id)) {
         return NextResponse.json(
           {
             success: false,
-            message: "رقم الطلب غير صحيح",
+            message:
+              "رقم الطلب غير صحيح",
           },
           { status: 400 }
         );
@@ -37,6 +116,7 @@ export async function GET(request: Request) {
           where: {
             id,
           },
+
           include: {
             replies: {
               orderBy: {
@@ -50,7 +130,8 @@ export async function GET(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            message: "لم يتم العثور على الطلب",
+            message:
+              "لم يتم العثور على الطلب",
           },
           { status: 404 }
         );
@@ -71,6 +152,7 @@ export async function GET(request: Request) {
         orderBy: {
           createdAt: "desc",
         },
+
         include: {
           replies: {
             orderBy: {
@@ -113,14 +195,18 @@ export async function POST(
 ) {
   try {
     const contentType =
-      request.headers.get("content-type") || "";
+      request.headers.get(
+        "content-type"
+      ) || "";
 
     let companyName = "";
     let requestType = "";
     let details = "";
     let applicantName = "";
     let phone = "";
-    let fileUrl: string | null = null;
+    let fileUrl:
+      | string
+      | null = null;
 
     // ==================================================
     // طلب يحتوي على ملف
@@ -135,40 +221,46 @@ export async function POST(
         await request.formData();
 
       companyName = String(
-        formData.get("companyName") || ""
+        formData.get(
+          "companyName"
+        ) || ""
       );
 
       requestType = String(
-        formData.get("requestType") || ""
+        formData.get(
+          "requestType"
+        ) || ""
       );
 
       details = String(
-        formData.get("details") || ""
+        formData.get(
+          "details"
+        ) || ""
       );
 
-      applicantName = String(
-        formData.get("applicantName") || ""
-      );
+      applicantName =
+        String(
+          formData.get(
+            "applicantName"
+          ) || ""
+        );
 
       phone = String(
-        formData.get("phone") || ""
+        formData.get("phone") ||
+          ""
       );
 
       const file =
         formData.get("file");
 
+      // ==================================================
+      // رفع الملف إلى Supabase
+      // ==================================================
+
       if (
         file instanceof File &&
         file.size > 0
       ) {
-        const allowedTypes = [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-excel",
-          "image/jpeg",
-          "image/png",
-        ];
-
         if (
           !allowedTypes.includes(
             file.type
@@ -184,57 +276,20 @@ export async function POST(
           );
         }
 
-        const uploadDirectory =
-          path.join(
-            process.cwd(),
-            "public",
-            "uploads",
-            "requests"
-          );
-
-        if (
-          !fs.existsSync(
-            uploadDirectory
-          )
-        ) {
-          fs.mkdirSync(
-            uploadDirectory,
-            {
-              recursive: true,
-            }
-          );
-        }
-
         const originalName =
-          file.name
-            .replace(
-              /[^a-zA-Z0-9.\u0600-\u06FF_-]/g,
-              "_"
-            )
-            .replace(
-              /_+/g,
-              "_"
-            );
+          sanitizeFileName(
+            file.name
+          );
 
         const fileName =
           `request-${Date.now()}-${originalName}`;
 
-        const filePath =
-          path.join(
-            uploadDirectory,
+        fileUrl =
+          await uploadFile(
+            file,
+            "requests",
             fileName
           );
-
-        const bytes =
-          await file.arrayBuffer();
-
-        fs.writeFileSync(
-          filePath,
-          Buffer.from(bytes)
-        );
-
-        fileUrl =
-          `/uploads/requests/${fileName}`;
       }
     } else {
       // ==================================================
@@ -260,11 +315,12 @@ export async function POST(
         body.phone || "";
 
       fileUrl =
-        body.fileUrl || null;
+        body.fileUrl ||
+        null;
     }
 
     // ==================================================
-    // حفظ الطلب
+    // حفظ الطلب في قاعدة البيانات
     // ==================================================
 
     const newRequest =
@@ -277,6 +333,7 @@ export async function POST(
           phone,
           fileUrl,
         },
+
         include: {
           replies: true,
         },
@@ -314,7 +371,9 @@ export async function PATCH(
 ) {
   try {
     const contentType =
-      request.headers.get("content-type") || "";
+      request.headers.get(
+        "content-type"
+      ) || "";
 
     // ==================================================
     // إرسال رد من الأدمن
@@ -335,7 +394,9 @@ export async function PATCH(
         formData.get("reply");
 
       const file =
-        formData.get("replyFile");
+        formData.get(
+          "replyFile"
+        );
 
       const id =
         Number(idValue);
@@ -359,11 +420,13 @@ export async function PATCH(
       // ==================================================
 
       const existingRequest =
-        await prisma.request.findUnique({
-          where: {
-            id,
-          },
-        });
+        await prisma.request.findUnique(
+          {
+            where: {
+              id,
+            },
+          }
+        );
 
       if (!existingRequest) {
         return NextResponse.json(
@@ -377,29 +440,23 @@ export async function PATCH(
       }
 
       const replyText =
-        typeof replyValue === "string"
+        typeof replyValue ===
+        "string"
           ? replyValue.trim()
           : "";
 
       let replyFileUrl:
-        string | null = null;
+        | string
+        | null = null;
 
       // ==================================================
-      // رفع ملف الرد
+      // رفع ملف الرد إلى Supabase
       // ==================================================
 
       if (
         file instanceof File &&
         file.size > 0
       ) {
-        const allowedTypes = [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-excel",
-          "image/jpeg",
-          "image/png",
-        ];
-
         if (
           !allowedTypes.includes(
             file.type
@@ -415,57 +472,20 @@ export async function PATCH(
           );
         }
 
-        const uploadDirectory =
-          path.join(
-            process.cwd(),
-            "public",
-            "uploads",
-            "replies"
-          );
-
-        if (
-          !fs.existsSync(
-            uploadDirectory
-          )
-        ) {
-          fs.mkdirSync(
-            uploadDirectory,
-            {
-              recursive: true,
-            }
-          );
-        }
-
         const originalName =
-          file.name
-            .replace(
-              /[^a-zA-Z0-9.\u0600-\u06FF_-]/g,
-              "_"
-            )
-            .replace(
-              /_+/g,
-              "_"
-            );
+          sanitizeFileName(
+            file.name
+          );
 
         const fileName =
           `reply-${id}-${Date.now()}-${originalName}`;
 
-        const filePath =
-          path.join(
-            uploadDirectory,
+        replyFileUrl =
+          await uploadFile(
+            file,
+            "replies",
             fileName
           );
-
-        const bytes =
-          await file.arrayBuffer();
-
-        fs.writeFileSync(
-          filePath,
-          Buffer.from(bytes)
-        );
-
-        replyFileUrl =
-          `/uploads/replies/${fileName}`;
       }
 
       // ==================================================
@@ -504,7 +524,6 @@ export async function PATCH(
 
       // ==================================================
       // تحديث الطلب الرئيسي
-      // يتم حفظ تاريخ آخر رد تلقائيًا
       // ==================================================
 
       const updatedRequest =
@@ -523,7 +542,6 @@ export async function PATCH(
             replyFileUrl:
               replyFileUrl,
 
-            // حفظ تاريخ ووقت آخر رد
             replyAt:
               new Date(),
           },
@@ -575,7 +593,8 @@ export async function PATCH(
 
         data: {
           status:
-            body.status !== undefined
+            body.status !==
+            undefined
               ? body.status
               : undefined,
         },
