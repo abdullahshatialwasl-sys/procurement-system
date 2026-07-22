@@ -419,6 +419,8 @@ export default function Home() {
 
             <input
               type="tel"
+              inputMode="tel"
+              dir="ltr"
               value={phone}
               onChange={(e) =>
                 setPhone(
@@ -426,7 +428,7 @@ export default function Home() {
                 )
               }
               placeholder="رقم الجوال"
-              className={inputStyle}
+              className={`${inputStyle} text-right`}
             />
 
           </div>
@@ -568,11 +570,37 @@ export default function Home() {
                 تم استلام طلبك بنجاح ✅
               </p>
 
-              <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#37358A] mt-3 break-words">
+              <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#37358A] mt-3">
                 رقم الطلب:
-                {" "}
-                {submittedRequestNumber}
               </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    submittedRequestNumber
+                  ) {
+                    navigator.clipboard
+                      .writeText(
+                        submittedRequestNumber
+                      )
+                      .then(() => {
+                        alert(
+                          "تم نسخ رقم الطلب"
+                        );
+                      })
+                      .catch(() => {
+                        alert(
+                          "حدد رقم الطلب وانسخه يدويًا"
+                        );
+                      });
+                  }
+                }}
+                className="mt-2 text-xl sm:text-2xl md:text-3xl font-extrabold text-[#37358A] underline cursor-pointer select-text break-all"
+                title="اضغط لنسخ رقم الطلب"
+              >
+                {submittedRequestNumber}
+              </button>
 
               <p className="text-sm sm:text-base md:text-lg font-bold text-gray-800 mt-4 sm:mt-5 leading-7 sm:leading-8">
                 سيتم مراجعة طلبك والرد عليك خلال مدة تتراوح من 6 إلى 24 ساعة.
