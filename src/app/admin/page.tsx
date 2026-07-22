@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 
+type RequestAttachment = {
+  id: number;
+  fileUrl: string;
+  fileName: string;
+  createdAt: string;
+};
+
 type RequestReply = {
   id: number;
   reply: string | null;
@@ -24,6 +31,7 @@ type RequestData = {
   replyAt?: string | null;
   createdAt: string;
   replies?: RequestReply[];
+  attachments?: RequestAttachment[];
 };
 
 export default function AdminPage() {
@@ -35,31 +43,27 @@ export default function AdminPage() {
   const [replyFile, setReplyFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // البحث
   const [searchText, setSearchText] = useState("");
-
-  // فلترة الحالة
   const [statusFilter, setStatusFilter] = useState("الكل");
-
-  // فلترة التاريخ
   const [dateFilter, setDateFilter] = useState("الكل");
 
   const [customFromDate, setCustomFromDate] = useState("");
   const [customToDate, setCustomToDate] = useState("");
 
-  // حالة الحذف
   const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  // ==================================================
-  // تنسيق التاريخ
-  // ==================================================
 
   function formatDate(date: string | null | undefined) {
     if (!date) {
       return "غير متوفر";
     }
 
-    return new Date(date).toLocaleString("ar-SA", {
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "غير متوفر";
+    }
+
+    return parsedDate.toLocaleString("ar-SA", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -67,10 +71,6 @@ export default function AdminPage() {
       minute: "2-digit",
     });
   }
-
-  // ==================================================
-  // جلب الطلبات
-  // ==================================================
 
   async function getRequests() {
     try {
@@ -80,36 +80,39 @@ export default function AdminPage() {
 
       const data = await response.json();
 
-      if (data.success) {
-        setRequests(data.data);
+      if (!response.ok || !data.success) {
+        alert(data.message || "حدث خطأ في جلب الطلبات");
+        return;
+      }
 
-        if (selectedRequest) {
-          const updated = data.data.find(
-            (item: RequestData) =>
-              item.id === selectedRequest.id
-          );
+      const receivedRequests: RequestData[] = Array.isArray(data.data)
+        ? data.data
+        : [];
 
-          if (updated) {
-            setSelectedRequest(updated);
-          } else {
-            setSelectedRequest(null);
-          }
+      setRequests(receivedRequests);
+
+      if (selectedRequest) {
+        const updated = receivedRequests.find(
+          (item) => item.id === selectedRequest.id
+        );
+
+        if (updated) {
+          setSelectedRequest(updated);
+        } else {
+          setSelectedRequest(null);
         }
       }
     } catch (error) {
-      console.error(error);
-
+      console.error("GET REQUESTS ERROR:", error);
       alert("حدث خطأ في جلب الطلبات");
     }
   }
 
-  // ==================================================
-  // حذف طلب
-  // ==================================================
-
   async function deleteRequest(id: number) {
     const confirmed = window.confirm(
-      `هل أنت متأكد من حذف الطلب PR-${id}؟\n\nسيتم حذف الطلب وجميع الردود المرتبطة به نهائيًا.`
+      "هل أنت متأكد من حذف الطلب PR-" +
+        id +
+        "؟\n\nسيتم حذف الطلب وجميع الردود والمرفقات المرتبطة به نهائيًا."
     );
 
     if (!confirmed) {
@@ -119,64 +122,41 @@ export default function AdminPage() {
     setDeletingId(id);
 
     try {
-      const response = await fetch(
-        "/api/requests",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id,
-          }),
-        }
-      );
+      const response = await fetch("/api/requests", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+        }),
+      });
 
       const data = await response.json();
 
-      if (!data.success) {
-        alert(
-          data.message ||
-            "حدث خطأ أثناء حذف الطلب"
-        );
-
+      if (!response.ok || !data.success) {
+        alert(data.message || "حدث خطأ أثناء حذف الطلب");
         return;
       }
 
-      // إزالة الطلب من القائمة مباشرة
       setRequests((prev) =>
-        prev.filter(
-          (item) => item.id !== id
-        )
+        prev.filter((item) => item.id !== id)
       );
 
-      // إغلاق التفاصيل إذا كان الطلب المحذوف مفتوحًا
-      if (
-        selectedRequest?.id === id
-      ) {
+      if (selectedRequest?.id === id) {
         setSelectedRequest(null);
       }
 
       alert("تم حذف الطلب بنجاح");
     } catch (error) {
-      console.error(error);
-
-      alert(
-        "حدث خطأ أثناء حذف الطلب"
-      );
+      console.error("DELETE REQUEST ERROR:", error);
+      alert("حدث خطأ أثناء حذف الطلب");
     } finally {
       setDeletingId(null);
     }
   }
 
-  // ==================================================
-  // تحديث حالة الطلب
-  // ==================================================
-
-  async function updateStatus(
-    id: number,
-    status: string
-  ) {
+  async function updateStatus(id: number, status: string) {
     try {
       const response = await fetch("/api/requests", {
         method: "PATCH",
@@ -191,12 +171,8 @@ export default function AdminPage() {
 
       const data = await response.json();
 
-      if (!data.success) {
-        alert(
-          data.message ||
-            "حدث خطأ في تحديث الحالة"
-        );
-
+      if (!response.ok || !data.success) {
+        alert(data.message || "حدث خطأ في تحديث الحالة");
         return;
       }
 
@@ -222,17 +198,10 @@ export default function AdminPage() {
         );
       }
     } catch (error) {
-      console.error(error);
-
-      alert(
-        "حدث خطأ أثناء تحديث حالة الطلب"
-      );
+      console.error("UPDATE STATUS ERROR:", error);
+      alert("حدث خطأ أثناء تحديث حالة الطلب");
     }
   }
-
-  // ==================================================
-  // إرسال الرد
-  // ==================================================
 
   async function sendReply() {
     if (!selectedRequest) {
@@ -240,10 +209,7 @@ export default function AdminPage() {
     }
 
     if (!reply.trim() && !replyFile) {
-      alert(
-        "يرجى كتابة الرد أو إرفاق ملف واحد على الأقل"
-      );
-
+      alert("يرجى كتابة الرد أو إرفاق ملف واحد على الأقل");
       return;
     }
 
@@ -257,198 +223,166 @@ export default function AdminPage() {
         String(selectedRequest.id)
       );
 
-      formData.append(
-        "reply",
-        reply
-      );
+      formData.append("reply", reply.trim());
 
       if (replyFile) {
-        formData.append(
-          "replyFile",
-          replyFile
-        );
+        formData.append("replyFile", replyFile);
       }
 
-      const response = await fetch(
-        "/api/requests",
-        {
-          method: "PATCH",
-          body: formData,
-        }
-      );
+      const response = await fetch("/api/requests", {
+        method: "PATCH",
+        body: formData,
+      });
 
       const data = await response.json();
 
-      if (!data.success) {
+      if (!response.ok || !data.success) {
         alert(
           data.message ||
             "حدث خطأ أثناء إرسال الرد"
         );
-
         return;
       }
-
-      await getRequests();
-
-      setSelectedRequest(data.data);
 
       setReply("");
       setReplyFile(null);
 
-      alert(
-        "تم إرسال الرد وحفظه تلقائيًا بنجاح"
-      );
-    } catch (error) {
-      console.error(error);
+      await getRequests();
 
-      alert(
-        "حدث خطأ أثناء إرسال الرد"
-      );
+      if (data.data) {
+        setSelectedRequest(data.data);
+      }
+
+      alert("تم إرسال الرد وحفظه تلقائيًا بنجاح");
+    } catch (error) {
+      console.error("SEND REPLY ERROR:", error);
+      alert("حدث خطأ أثناء إرسال الرد");
     } finally {
       setLoading(false);
     }
   }
 
-  // ==================================================
-  // تحميل الطلبات
-  // ==================================================
-
   useEffect(() => {
     getRequests();
   }, []);
 
-  // ==================================================
-  // البحث والفلترة
-  // ==================================================
+  const filteredRequests = requests.filter((item) => {
+    const search = searchText.trim().toLowerCase();
 
-  const filteredRequests =
-    requests.filter((item) => {
-      const search =
-        searchText
-          .trim()
-          .toLowerCase();
+    const matchesSearch =
+      !search ||
+      ("PR-" + item.id).toLowerCase().includes(search) ||
+      (item.companyName || "")
+        .toLowerCase()
+        .includes(search) ||
+      (item.requestType || "")
+        .toLowerCase()
+        .includes(search) ||
+      (item.applicantName || "")
+        .toLowerCase()
+        .includes(search) ||
+      (item.phone || "")
+        .toLowerCase()
+        .includes(search) ||
+      (item.details || "")
+        .toLowerCase()
+        .includes(search);
 
-      const matchesSearch =
-        !search ||
-        `PR-${item.id}`
-          .toLowerCase()
-          .includes(search) ||
-        item.companyName
-          .toLowerCase()
-          .includes(search) ||
-        item.requestType
-          .toLowerCase()
-          .includes(search) ||
-        item.applicantName
-          .toLowerCase()
-          .includes(search) ||
-        item.phone
-          .toLowerCase()
-          .includes(search) ||
-        (item.details || "")
-          .toLowerCase()
-          .includes(search);
+    const matchesStatus =
+      statusFilter === "الكل" ||
+      item.status === statusFilter;
 
-      const matchesStatus =
-        statusFilter === "الكل" ||
-        item.status === statusFilter;
+    const requestDate = new Date(item.createdAt);
+    const now = new Date();
 
-      const requestDate =
-        new Date(item.createdAt);
+    let matchesDate = true;
 
-      const now = new Date();
+    if (dateFilter === "آخر 7 أيام") {
+      const fromDate = new Date();
 
-      let matchesDate = true;
-
-      if (dateFilter === "آخر 7 أيام") {
-        const fromDate = new Date();
-
-        fromDate.setDate(
-          now.getDate() - 7
-        );
-
-        matchesDate =
-          requestDate >= fromDate;
-      }
-
-      if (dateFilter === "آخر 30 يوم") {
-        const fromDate = new Date();
-
-        fromDate.setDate(
-          now.getDate() - 30
-        );
-
-        matchesDate =
-          requestDate >= fromDate;
-      }
-
-      if (dateFilter === "هذا الشهر") {
-        matchesDate =
-          requestDate.getMonth() ===
-            now.getMonth() &&
-          requestDate.getFullYear() ===
-            now.getFullYear();
-      }
-
-      if (dateFilter === "الشهر الماضي") {
-        const previousMonth =
-          new Date(
-            now.getFullYear(),
-            now.getMonth() - 1,
-            1
-          );
-
-        matchesDate =
-          requestDate.getMonth() ===
-            previousMonth.getMonth() &&
-          requestDate.getFullYear() ===
-            previousMonth.getFullYear();
-      }
-
-      if (dateFilter === "فترة مخصصة") {
-        if (customFromDate) {
-          const from =
-            new Date(customFromDate);
-
-          from.setHours(
-            0,
-            0,
-            0,
-            0
-          );
-
-          matchesDate =
-            matchesDate &&
-            requestDate >= from;
-        }
-
-        if (customToDate) {
-          const to =
-            new Date(customToDate);
-
-          to.setHours(
-            23,
-            59,
-            59,
-            999
-          );
-
-          matchesDate =
-            matchesDate &&
-            requestDate <= to;
-        }
-      }
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesDate
+      fromDate.setDate(
+        now.getDate() - 7
       );
-    });
 
-  // ==================================================
-  // تحميل الطلبات إلى Excel
-  // ==================================================
+      matchesDate =
+        requestDate >= fromDate;
+    }
+
+    if (dateFilter === "آخر 30 يوم") {
+      const fromDate = new Date();
+
+      fromDate.setDate(
+        now.getDate() - 30
+      );
+
+      matchesDate =
+        requestDate >= fromDate;
+    }
+
+    if (dateFilter === "هذا الشهر") {
+      matchesDate =
+        requestDate.getMonth() ===
+          now.getMonth() &&
+        requestDate.getFullYear() ===
+          now.getFullYear();
+    }
+
+    if (dateFilter === "الشهر الماضي") {
+      const previousMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() - 1,
+        1
+      );
+
+      matchesDate =
+        requestDate.getMonth() ===
+          previousMonth.getMonth() &&
+        requestDate.getFullYear() ===
+          previousMonth.getFullYear();
+    }
+
+    if (dateFilter === "فترة مخصصة") {
+      if (customFromDate) {
+        const from = new Date(
+          customFromDate
+        );
+
+        from.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        matchesDate =
+          matchesDate &&
+          requestDate >= from;
+      }
+
+      if (customToDate) {
+        const to = new Date(
+          customToDate
+        );
+
+        to.setHours(
+          23,
+          59,
+          59,
+          999
+        );
+
+        matchesDate =
+          matchesDate &&
+          requestDate <= to;
+      }
+    }
+
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesDate
+    );
+  });
 
   function exportToExcel() {
     if (filteredRequests.length === 0) {
@@ -460,43 +394,45 @@ export default function AdminPage() {
     }
 
     const excelData =
-      filteredRequests.map(
-        (item) => ({
-          "رقم الطلب":
-            `PR-${item.id}`,
+      filteredRequests.map((item) => ({
+        "رقم الطلب":
+          "PR-" + item.id,
 
-          "الشركة":
-            item.companyName,
+        "الشركة":
+          item.companyName,
 
-          "نوع الطلب":
-            item.requestType,
+        "نوع الطلب":
+          item.requestType,
 
-          "تفاصيل الطلب":
-            item.details ||
-            "لا توجد تفاصيل",
+        "تفاصيل الطلب":
+          item.details ||
+          "لا توجد تفاصيل",
 
-          "مقدم الطلب":
-            item.applicantName,
+        "مقدم الطلب":
+          item.applicantName,
 
-          "رقم الجوال":
-            item.phone,
+        "رقم الجوال":
+          item.phone,
 
-          "تاريخ الطلب":
-            formatDate(
-              item.createdAt
-            ),
+        "تاريخ الطلب":
+          formatDate(
+            item.createdAt
+          ),
 
-          "تاريخ آخر رد":
-            item.replyAt
-              ? formatDate(
-                  item.replyAt
-                )
-              : "لا يوجد رد",
+        "تاريخ آخر رد":
+          item.replyAt
+            ? formatDate(
+                item.replyAt
+              )
+            : "لا يوجد رد",
 
-          "الحالة":
-            item.status,
-        })
-      );
+        "الحالة":
+          item.status,
+
+        "عدد المرفقات":
+          item.attachments?.length ||
+          (item.fileUrl ? 1 : 0),
+      }));
 
     const worksheet =
       XLSX.utils.json_to_sheet(
@@ -522,6 +458,7 @@ export default function AdminPage() {
       { wch: 25 },
       { wch: 25 },
       { wch: 20 },
+      { wch: 15 },
     ];
 
     const today =
@@ -531,22 +468,23 @@ export default function AdminPage() {
 
     XLSX.writeFile(
       workbook,
-      `الطلبات-الواردة-${today}.xlsx`
+      "الطلبات-الواردة-" +
+        today +
+        ".xlsx"
     );
   }
 
   return (
     <main
       dir="rtl"
-      className="min-h-screen bg-gray-100 p-8"
+      className="min-h-screen bg-gray-100 p-4 md:p-8"
     >
       <div className="max-w-[1800px] mx-auto">
 
-        {/* Header */}
+        {/* HEADER */}
 
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 border">
-
-          <div className="flex justify-center items-center gap-5">
+        <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-8 border">
+          <div className="flex flex-col md:flex-row justify-center items-center gap-5">
 
             <img
               src="/images/nma-logo.jpeg"
@@ -556,7 +494,7 @@ export default function AdminPage() {
 
             <div className="text-center">
 
-              <h1 className="text-4xl font-extrabold text-black">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-black">
                 لوحة تحكم المشتريات
               </h1>
 
@@ -567,11 +505,9 @@ export default function AdminPage() {
             </div>
 
           </div>
-
         </div>
 
-
-        {/* الإحصائيات */}
+        {/* STATISTICS */}
 
         <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-5 mb-8">
 
@@ -585,7 +521,6 @@ export default function AdminPage() {
             </p>
           </div>
 
-
           <div className="bg-white rounded-xl shadow-lg border p-5">
             <h3 className="font-bold text-black">
               جديدة
@@ -595,13 +530,11 @@ export default function AdminPage() {
               {
                 requests.filter(
                   (r) =>
-                    r.status ===
-                    "جديد"
+                    r.status === "جديد"
                 ).length
               }
             </p>
           </div>
-
 
           <div className="bg-white rounded-xl shadow-lg border p-5">
             <h3 className="font-bold text-black">
@@ -619,7 +552,6 @@ export default function AdminPage() {
             </p>
           </div>
 
-
           <div className="bg-white rounded-xl shadow-lg border p-5">
             <h3 className="font-bold text-black">
               تم الرد
@@ -636,7 +568,6 @@ export default function AdminPage() {
             </p>
           </div>
 
-
           <div className="bg-white rounded-xl shadow-lg border p-5">
             <h3 className="font-bold text-black">
               تم التنفيذ
@@ -652,7 +583,6 @@ export default function AdminPage() {
               }
             </p>
           </div>
-
 
           <div className="bg-white rounded-xl shadow-lg border-2 border-red-200 p-5">
             <h3 className="font-bold text-red-700">
@@ -672,8 +602,7 @@ export default function AdminPage() {
 
         </div>
 
-
-        {/* البحث والفلترة */}
+        {/* SEARCH */}
 
         <div className="bg-white rounded-2xl shadow-lg border p-6 mb-8">
 
@@ -681,11 +610,9 @@ export default function AdminPage() {
             البحث عن الطلبات
           </h2>
 
-
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
 
             <div>
-
               <label className="block font-bold text-black mb-2">
                 بحث
               </label>
@@ -701,20 +628,15 @@ export default function AdminPage() {
                 placeholder="ابحث برقم الطلب أو الشركة أو نوع الطلب..."
                 className="w-full border-2 border-gray-300 rounded-xl p-4 text-black focus:outline-none focus:border-black"
               />
-
             </div>
 
-
             <div>
-
               <label className="block font-bold text-black mb-2">
                 فلترة حسب الحالة
               </label>
 
               <select
-                value={
-                  statusFilter
-                }
+                value={statusFilter}
                 onChange={(e) =>
                   setStatusFilter(
                     e.target.value
@@ -722,7 +644,6 @@ export default function AdminPage() {
                 }
                 className="w-full border-2 border-gray-300 rounded-xl p-4 text-black bg-white"
               >
-
                 <option value="الكل">
                   جميع الطلبات
                 </option>
@@ -750,40 +671,37 @@ export default function AdminPage() {
                 <option value="مغلق">
                   مغلقة
                 </option>
-
               </select>
-
             </div>
 
-
             <div>
-
               <label className="block font-bold text-black mb-2">
                 البحث حسب الفترة
               </label>
 
               <select
-                value={
-                  dateFilter
-                }
+                value={dateFilter}
                 onChange={(e) => {
+                  const value =
+                    e.target.value;
 
-                  setDateFilter(
-                    e.target.value
-                  );
+                  setDateFilter(value);
 
                   if (
-                    e.target.value !==
+                    value !==
                     "فترة مخصصة"
                   ) {
-                    setCustomFromDate("");
-                    setCustomToDate("");
-                  }
+                    setCustomFromDate(
+                      ""
+                    );
 
+                    setCustomToDate(
+                      ""
+                    );
+                  }
                 }}
                 className="w-full border-2 border-gray-300 rounded-xl p-4 text-black bg-white"
               >
-
                 <option value="الكل">
                   جميع الفترات
                 </option>
@@ -807,21 +725,16 @@ export default function AdminPage() {
                 <option value="فترة مخصصة">
                   تحديد فترة مخصصة
                 </option>
-
               </select>
-
             </div>
 
           </div>
 
-
           {dateFilter ===
             "فترة مخصصة" && (
-
             <div className="grid md:grid-cols-2 gap-5 mt-5">
 
               <div>
-
                 <label className="block font-bold text-black mb-2">
                   من تاريخ
                 </label>
@@ -838,12 +751,9 @@ export default function AdminPage() {
                   }
                   className="w-full border-2 border-gray-300 rounded-xl p-4 text-black"
                 />
-
               </div>
 
-
               <div>
-
                 <label className="block font-bold text-black mb-2">
                   إلى تاريخ
                 </label>
@@ -860,52 +770,39 @@ export default function AdminPage() {
                   }
                   className="w-full border-2 border-gray-300 rounded-xl p-4 text-black"
                 />
-
               </div>
 
             </div>
-
           )}
 
-
           <div className="mt-5 text-gray-600 font-bold">
-
-            عدد النتائج:
-            {" "}
+            عدد النتائج:{" "}
             {filteredRequests.length}
-
           </div>
 
         </div>
 
-
-        {/* جدول الطلبات */}
+        {/* REQUESTS TABLE */}
 
         <div className="bg-white rounded-2xl shadow-lg border p-6">
 
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
 
             <h2 className="text-3xl font-bold text-black">
               الطلبات الواردة
             </h2>
 
-
             <div className="flex gap-3">
 
               <button
-                onClick={
-                  getRequests
-                }
-                className="bg-gray-800 text-white px-5 py-3 rounded-xl font-bold"
+                onClick={getRequests}
+                className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-3 rounded-xl font-bold"
               >
                 تحديث القائمة
               </button>
 
-
               <button
-                onClick={
-                  exportToExcel
-                }
+                onClick={exportToExcel}
                 className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl font-bold"
               >
                 تحميل Excel
@@ -915,13 +812,11 @@ export default function AdminPage() {
 
           </div>
 
-
           <div className="overflow-x-auto">
 
             <table className="w-full min-w-[1650px] border-collapse">
 
               <thead>
-
                 <tr className="bg-gray-200 text-black">
 
                   <th className="p-4 text-right whitespace-nowrap border">
@@ -965,37 +860,29 @@ export default function AdminPage() {
                   </th>
 
                 </tr>
-
               </thead>
-
 
               <tbody>
 
                 {filteredRequests.length >
                 0 ? (
-
                   filteredRequests.map(
                     (item) => (
 
                       <tr
-                        key={
-                          item.id
-                        }
+                        key={item.id}
                         className="border-b hover:bg-gray-50 text-black"
                       >
 
                         <td className="p-4 font-bold whitespace-nowrap border">
-                          PR-
-                          {item.id}
+                          PR-{item.id}
                         </td>
-
 
                         <td className="p-4 whitespace-nowrap border font-semibold">
                           {
                             item.companyName
                           }
                         </td>
-
 
                         <td className="p-4 border max-w-[220px]">
                           <div className="whitespace-normal leading-7">
@@ -1005,17 +892,14 @@ export default function AdminPage() {
                           </div>
                         </td>
 
-
                         <td className="p-4 border max-w-[300px]">
                           <div className="whitespace-normal leading-7">
                             {
-                              item.details
-                                ? item.details
-                                : "لا توجد تفاصيل"
+                              item.details ||
+                              "لا توجد تفاصيل"
                             }
                           </div>
                         </td>
-
 
                         <td className="p-4 whitespace-nowrap border">
                           {
@@ -1023,33 +907,23 @@ export default function AdminPage() {
                           }
                         </td>
 
-
                         <td className="p-4 whitespace-nowrap border">
-                          {
-                            item.phone
-                          }
+                          {item.phone}
                         </td>
 
-
                         <td className="p-4 whitespace-nowrap border">
-                          {
-                            formatDate(
-                              item.createdAt
-                            )
-                          }
+                          {formatDate(
+                            item.createdAt
+                          )}
                         </td>
 
-
                         <td className="p-4 whitespace-nowrap border">
-                          {
-                            item.replyAt
-                              ? formatDate(
-                                  item.replyAt
-                                )
-                              : "لا يوجد رد"
-                          }
+                          {item.replyAt
+                            ? formatDate(
+                                item.replyAt
+                              )
+                            : "لا يوجد رد"}
                         </td>
-
 
                         <td className="p-4 border">
 
@@ -1057,13 +931,10 @@ export default function AdminPage() {
                             value={
                               item.status
                             }
-                            onChange={(
-                              e
-                            ) =>
+                            onChange={(e) =>
                               updateStatus(
                                 item.id,
-                                e.target
-                                  .value
+                                e.target.value
                               )
                             }
                             className="border-2 border-gray-300 rounded-lg px-3 py-2 text-black bg-white font-bold"
@@ -1097,7 +968,6 @@ export default function AdminPage() {
 
                         </td>
 
-
                         <td className="p-4 border">
 
                           <div className="flex gap-2 items-center">
@@ -1108,11 +978,10 @@ export default function AdminPage() {
                                   item
                                 )
                               }
-                              className="bg-black text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap"
+                              className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-bold whitespace-nowrap"
                             >
                               عرض التفاصيل
                             </button>
-
 
                             <button
                               onClick={() =>
@@ -1140,18 +1009,15 @@ export default function AdminPage() {
 
                     )
                   )
-
                 ) : (
 
                   <tr>
-
                     <td
                       colSpan={10}
                       className="p-10 text-center text-gray-500 font-bold text-lg"
                     >
                       لا توجد طلبات مطابقة للبحث أو الفلترة
                     </td>
-
                   </tr>
 
                 )}
@@ -1164,8 +1030,7 @@ export default function AdminPage() {
 
         </div>
 
-
-        {/* تفاصيل الطلب */}
+        {/* REQUEST DETAILS */}
 
         {selectedRequest && (
 
@@ -1184,13 +1049,12 @@ export default function AdminPage() {
                     null
                   )
                 }
-                className="bg-gray-200 text-black px-5 py-2 rounded-xl font-bold"
+                className="bg-gray-200 hover:bg-gray-300 text-black px-5 py-2 rounded-xl font-bold"
               >
                 إغلاق التفاصيل
               </button>
 
             </div>
-
 
             <div className="space-y-5 text-xl text-black">
 
@@ -1204,18 +1068,14 @@ export default function AdminPage() {
                 }
               </p>
 
-
               <p>
                 <strong>
                   تاريخ إنشاء الطلب:
                 </strong>{" "}
-                {
-                  formatDate(
-                    selectedRequest.createdAt
-                  )
-                }
+                {formatDate(
+                  selectedRequest.createdAt
+                )}
               </p>
-
 
               <p>
                 <strong>
@@ -1226,7 +1086,6 @@ export default function AdminPage() {
                 }
               </p>
 
-
               <p>
                 <strong>
                   نوع الطلب:
@@ -1235,7 +1094,6 @@ export default function AdminPage() {
                   selectedRequest.requestType
                 }
               </p>
-
 
               <p>
                 <strong>
@@ -1246,7 +1104,6 @@ export default function AdminPage() {
                 }
               </p>
 
-
               <p>
                 <strong>
                   الجوال:
@@ -1255,7 +1112,6 @@ export default function AdminPage() {
                   selectedRequest.phone
                 }
               </p>
-
 
               <p>
                 <strong>
@@ -1266,20 +1122,18 @@ export default function AdminPage() {
                 }
               </p>
 
-
               <p>
                 <strong>
                   تاريخ آخر رد:
                 </strong>{" "}
-                {
-                  selectedRequest.replyAt
-                    ? formatDate(
-                        selectedRequest.replyAt
-                      )
-                    : "لا يوجد رد حتى الآن"
-                }
+                {selectedRequest.replyAt
+                  ? formatDate(
+                      selectedRequest.replyAt
+                    )
+                  : "لا يوجد رد حتى الآن"}
               </p>
 
+              {/* DETAILS */}
 
               <div className="border rounded-xl p-4 bg-gray-50">
 
@@ -1296,37 +1150,120 @@ export default function AdminPage() {
 
               </div>
 
+              {/* ATTACHMENTS */}
 
-              <div className="border rounded-xl p-4 bg-gray-50">
+              <div className="border rounded-xl p-5 bg-gray-50">
 
-                <strong>
-                  مرفق المورد:
-                </strong>
+                <div className="flex justify-between items-center mb-4">
 
-                {selectedRequest.fileUrl ? (
+                  <strong className="text-2xl">
+                    مرفقات المورد
+                  </strong>
 
-                  <a
-                    href={
-                      selectedRequest.fileUrl
-                    }
-                    download
-                    className="block mt-3 text-blue-600 font-bold underline"
-                  >
-                    تحميل مرفق المورد
-                  </a>
+                  <span className="bg-black text-white px-3 py-1 rounded-full text-sm font-bold">
+                    {
+                      (selectedRequest.attachments ??
+                        []).length ||
+                      (selectedRequest.fileUrl
+                        ? 1
+                        : 0)
+                    }{" "}
+                    ملف
+                  </span>
+
+                </div>
+
+                {(
+                  selectedRequest.attachments ??
+                  []
+                ).length > 0 ? (
+
+                  <div className="space-y-3">
+
+                    {(
+                      selectedRequest.attachments ??
+                      []
+                    ).map(
+                      (
+                        attachment,
+                        index
+                      ) => (
+
+                        <div
+                          key={
+                            attachment.id
+                          }
+                          className="bg-white border rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                        >
+
+                          <div>
+
+                            <p className="font-bold text-black">
+                              {index + 1}.{" "}
+                              {
+                                attachment.fileName
+                              }
+                            </p>
+
+                            <p className="text-sm text-gray-500 mt-1">
+                              تم الرفع:{" "}
+                              {formatDate(
+                                attachment.createdAt
+                              )}
+                            </p>
+
+                          </div>
+
+                          <a
+                            href={
+                              attachment.fileUrl
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-center"
+                          >
+                            فتح المرفق
+                          </a>
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
+                ) : selectedRequest.fileUrl ? (
+
+                  <div className="bg-white border rounded-xl p-4">
+
+                    <p className="font-bold text-black mb-3">
+                      مرفق المورد
+                    </p>
+
+                    <a
+                      href={
+                        selectedRequest.fileUrl
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold"
+                    >
+                      فتح مرفق المورد
+                    </a>
+
+                  </div>
 
                 ) : (
 
-                  <p className="mt-3 text-gray-500">
-                    لا يوجد مرفق
+                  <p className="text-gray-500 font-bold">
+                    لا يوجد مرفقات لهذا الطلب
                   </p>
 
                 )}
 
               </div>
 
-
-              {/* سجل الردود السابقة */}
+              {/* REPLIES */}
 
               <div className="border rounded-xl p-5 bg-gray-50">
 
@@ -1334,75 +1271,79 @@ export default function AdminPage() {
                   سجل الردود السابقة
                 </h3>
 
-                {selectedRequest.replies &&
-                selectedRequest.replies.length >
-                  0 ? (
+                {(
+                  selectedRequest.replies ??
+                  []
+                ).length > 0 ? (
 
                   <div className="space-y-5">
 
-                    {selectedRequest.replies.map(
-                      (item, index) => (
+                    {(
+                      selectedRequest.replies ??
+                      []
+                    ).map(
+                      (
+                        item,
+                        index
+                      ) => {
 
-                        <div
-                          key={
-                            item.id
-                          }
-                          className="bg-white border rounded-xl p-5"
-                        >
+                        const requestReplies =
+                          selectedRequest.replies ??
+                          [];
 
-                          <div className="flex justify-between items-center mb-3">
+                        return (
 
-                            <span className="font-bold text-[#37358A]">
-                              الرد رقم{" "}
-                              {
-                                selectedRequest
-                                  .replies
-                                  ?.length
-                                  ? selectedRequest
-                                      .replies
-                                      .length -
-                                    index
-                                  : index + 1
-                              }
-                            </span>
+                          <div
+                            key={
+                              item.id
+                            }
+                            className="bg-white border rounded-xl p-5"
+                          >
 
-                            <span className="text-sm text-gray-500">
-                              {
-                                formatDate(
+                            <div className="flex justify-between items-center mb-3">
+
+                              <span className="font-bold text-[#37358A]">
+                                الرد رقم{" "}
+                                {
+                                  requestReplies.length -
+                                  index
+                                }
+                              </span>
+
+                              <span className="text-sm text-gray-500">
+                                {formatDate(
                                   item.createdAt
-                                )
+                                )}
+                              </span>
+
+                            </div>
+
+                            <p className="text-black whitespace-pre-wrap leading-8">
+                              {
+                                item.reply ||
+                                "رد مرفق فقط بدون نص"
                               }
-                            </span>
+                            </p>
+
+                            {item.fileUrl && (
+
+                              <a
+                                href={
+                                  item.fileUrl
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold"
+                              >
+                                فتح ملف الرد
+                              </a>
+
+                            )}
 
                           </div>
 
-
-                          <p className="text-black whitespace-pre-wrap leading-8">
-                            {
-                              item.reply ||
-                              "رد مرفق فقط بدون نص"
-                            }
-                          </p>
-
-
-                          {item.fileUrl && (
-
-                            <a
-                              href={
-                                item.fileUrl
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-block mt-4 text-blue-600 font-bold underline"
-                            >
-                              فتح ملف الرد
-                            </a>
-
-                          )}
-
-                        </div>
-
-                      )
+                        );
+                      }
                     )}
 
                   </div>
@@ -1417,8 +1358,7 @@ export default function AdminPage() {
 
               </div>
 
-
-              {/* إرسال رد جديد */}
+              {/* SEND REPLY */}
 
               <div className="border-t pt-6 mt-6">
 
@@ -1426,11 +1366,8 @@ export default function AdminPage() {
                   إرسال رد للمورد
                 </h3>
 
-
                 <textarea
-                  value={
-                    reply
-                  }
+                  value={reply}
                   onChange={(e) =>
                     setReply(
                       e.target.value
@@ -1440,66 +1377,51 @@ export default function AdminPage() {
                   className="w-full border rounded-xl p-4 h-36 text-black"
                 />
 
-
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 mt-5">
 
                   <label className="block font-bold mb-3">
                     إرفاق ملف مع الرد
                   </label>
 
-
                   <input
                     type="file"
                     accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png"
                     onChange={(e) =>
                       setReplyFile(
-                        e.target
-                          .files?.[0] ||
+                        e.target.files?.[0] ||
                           null
                       )
                     }
                     className="w-full border rounded-xl p-4 text-black"
                   />
 
-
                   <p className="text-sm text-gray-500 mt-2">
-                    المسموح:
-                    {" "}
-                    PDF - Excel - JPG - JPEG - PNG
+                    المسموح: PDF - Excel - JPG - JPEG - PNG
                   </p>
-
 
                   {replyFile && (
 
                     <p className="text-green-700 font-bold mt-3">
-
-                      الملف المختار:
-                      {" "}
+                      الملف المختار:{" "}
                       {
                         replyFile.name
                       }
-
                     </p>
 
                   )}
 
                 </div>
 
-
                 <button
                   onClick={
                     sendReply
                   }
-                  disabled={
-                    loading
-                  }
-                  className="bg-black text-white px-8 py-4 rounded-xl font-bold mt-5 disabled:opacity-50"
+                  disabled={loading}
+                  className="bg-black hover:bg-gray-800 text-white px-8 py-4 rounded-xl font-bold mt-5 disabled:opacity-50"
                 >
-
                   {loading
                     ? "جاري الحفظ..."
                     : "إرسال الرد وحفظه تلقائيًا"}
-
                 </button>
 
               </div>
@@ -1511,7 +1433,6 @@ export default function AdminPage() {
         )}
 
       </div>
-
     </main>
   );
 }

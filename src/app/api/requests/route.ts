@@ -15,6 +15,10 @@ async function saveFile(
   fileUrl: string;
   fileName: string;
 }> {
+  if (!file || file.size === 0) {
+    throw new Error("الملف فارغ أو غير صالح");
+  }
+
   const originalFileName = safeFileName(file.name);
 
   const uniqueName = `${prefix}-${Date.now()}-${Math.random()
@@ -29,19 +33,31 @@ async function saveFile(
   const { error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(filePath, buffer, {
-      contentType: file.type || "application/octet-stream",
+      contentType:
+        file.type || "application/octet-stream",
       upsert: false,
     });
 
   if (error) {
-    console.error("SUPABASE STORAGE UPLOAD ERROR:", error);
+    console.error(
+      "SUPABASE STORAGE UPLOAD ERROR:",
+      error
+    );
 
-    throw new Error(`فشل رفع الملف: ${error.message}`);
+    throw new Error(
+      `فشل رفع الملف: ${error.message}`
+    );
   }
 
   const { data } = supabase.storage
     .from(BUCKET_NAME)
     .getPublicUrl(filePath);
+
+  if (!data?.publicUrl) {
+    throw new Error(
+      "تم رفع الملف ولكن تعذر إنشاء رابط الملف"
+    );
+  }
 
   return {
     fileUrl: data.publicUrl,
@@ -51,14 +67,23 @@ async function saveFile(
 
 // ==================================================
 // GET
-// جلب الطلبات أو البحث عن طلب برقم PR
+// جلب جميع الطلبات مع المرفقات والردود
+// أو البحث عن طلب برقم PR
 // ==================================================
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } =
+      new URL(request.url);
 
-    const number = searchParams.get("number");
+    const number =
+      searchParams.get("number");
+
+    // ==================================================
+    // البحث عن طلب محدد
+    // ==================================================
 
     if (number) {
       const cleanNumber = number
@@ -75,9 +100,47 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const foundRequest = await prisma.request.findUnique({
-        where: {
-          id,
+      const foundRequest =
+        await prisma.request.findUnique({
+          where: {
+            id,
+          },
+          include: {
+            replies: {
+              orderBy: {
+                createdAt: "desc",
+              },
+            },
+            attachments: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
+        });
+
+      if (!foundRequest) {
+        return NextResponse.json({
+          success: false,
+          message:
+            "لم يتم العثور على الطلب",
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: foundRequest,
+      });
+    }
+
+    // ==================================================
+    // جلب جميع الطلبات
+    // ==================================================
+
+    const requests =
+      await prisma.request.findMany({
+        orderBy: {
+          createdAt: "desc",
         },
         include: {
           replies: {
@@ -93,48 +156,23 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      if (!foundRequest) {
-        return NextResponse.json({
-          success: false,
-          message: "لم يتم العثور على الطلب",
-        });
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: foundRequest,
-      });
-    }
-
-    const requests = await prisma.request.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        replies: {
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
-        attachments: {
-          orderBy: {
-            createdAt: "asc",
-          },
-        },
-      },
-    });
-
     return NextResponse.json({
       success: true,
       data: requests,
     });
   } catch (error) {
-    console.error("GET REQUESTS ERROR:", error);
+    console.error(
+      "GET REQUESTS ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: "حدث خطأ أثناء جلب الطلبات",
+        message:
+          error instanceof Error
+            ? error.message
+            : "حدث خطأ أثناء جلب الطلبات",
       },
       {
         status: 500,
@@ -145,12 +183,15 @@ export async function GET(request: NextRequest) {
 
 // ==================================================
 // POST
-// إنشاء طلب جديد + رفع عدة ملفات إلى Supabase
+// إنشاء طلب جديد + حفظ جميع المرفقات
 // ==================================================
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const formData = await request.formData();
+    const formData =
+      await request.formData();
 
     const companyName = String(
       formData.get("companyName") || ""
@@ -180,33 +221,25 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({
         success: false,
-        message: "يرجى تعبئة جميع الحقول المطلوبة",
+        message:
+          "يرجى تعبئة جميع الحقول المطلوبة",
       });
     }
 
-    // إنشاء الطلب في قاعدة البيانات
-    const newRequest = await prisma.request.create({
-      data: {
-        companyName,
-        requestType,
-        details: details || null,
-        applicantName,
-        phone,
-        status: "جديد",
-      },
-    });
-
     // ==================================================
-    // جمع ملفات الطلب
+    // جمع جميع ملفات المورد
     // ==================================================
 
-    const files = formData.getAll("files");
+    const uploadedFiles =
+      formData.getAll("files");
 
-    const oldFile = formData.get("file");
+    const oldFile =
+      formData.get("file");
 
     const allFiles: File[] = [];
 
-    for (const item of files) {
+    // الملفات الجديدة باسم files
+    for (const item of uploadedFiles) {
       if (
         item instanceof File &&
         item.size > 0
@@ -215,6 +248,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // دعم اسم الملف القديم file
     if (
       oldFile instanceof File &&
       oldFile.size > 0
@@ -223,8 +257,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ==================================================
-    // رفع الملفات إلى Supabase
+    // رفع جميع الملفات إلى Supabase أولًا
     // ==================================================
+
+    const savedAttachments: {
+      fileUrl: string;
+      fileName: string;
+    }[] = [];
 
     for (const file of allFiles) {
       const saved = await saveFile(
@@ -232,30 +271,43 @@ export async function POST(request: NextRequest) {
         "requests"
       );
 
-      await prisma.requestAttachment.create({
-        data: {
-          requestId: newRequest.id,
-          fileUrl: saved.fileUrl,
-          fileName: saved.fileName,
-        },
-      });
+      savedAttachments.push(saved);
     }
 
     // ==================================================
-    // جلب الطلب النهائي
+    // إنشاء الطلب مع المرفقات في نفس العملية
     // ==================================================
 
-    const finalRequest =
-      await prisma.request.findUnique({
-        where: {
-          id: newRequest.id,
+    const newRequest =
+      await prisma.request.create({
+        data: {
+          companyName,
+          requestType,
+          details:
+            details || null,
+          applicantName,
+          phone,
+          status: "جديد",
+
+          attachments: {
+            create: savedAttachments.map(
+              (attachment) => ({
+                fileUrl:
+                  attachment.fileUrl,
+                fileName:
+                  attachment.fileName,
+              })
+            ),
+          },
         },
+
         include: {
           attachments: {
             orderBy: {
               createdAt: "asc",
             },
           },
+
           replies: {
             orderBy: {
               createdAt: "desc",
@@ -264,18 +316,31 @@ export async function POST(request: NextRequest) {
         },
       });
 
+    // ==================================================
+    // إرجاع الطلب النهائي
+    // ==================================================
+
     return NextResponse.json({
       success: true,
-      message: "تم استلام طلبكم بنجاح",
-      requestNumber: `PR-${newRequest.id}`,
-      data: finalRequest,
+
+      message:
+        "تم استلام طلبكم بنجاح",
+
+      requestNumber:
+        `PR-${newRequest.id}`,
+
+      data: newRequest,
     });
   } catch (error) {
-    console.error("POST REQUEST ERROR:", error);
+    console.error(
+      "POST REQUEST ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
+
         message:
           error instanceof Error
             ? error.message
@@ -290,22 +355,30 @@ export async function POST(request: NextRequest) {
 
 // ==================================================
 // PATCH
-// تحديث حالة الطلب أو إرسال رد
+// تحديث حالة الطلب
+// أو إرسال رد للمورد
 // ==================================================
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(
+  request: NextRequest
+) {
   try {
     const contentType =
-      request.headers.get("content-type") || "";
+      request.headers.get(
+        "content-type"
+      ) || "";
 
     // ==================================================
     // تحديث حالة الطلب
     // ==================================================
 
     if (
-      contentType.includes("application/json")
+      contentType.includes(
+        "application/json"
+      )
     ) {
-      const body = await request.json();
+      const body =
+        await request.json();
 
       const id = Number(body.id);
 
@@ -316,7 +389,8 @@ export async function PATCH(request: NextRequest) {
       if (!id || !status) {
         return NextResponse.json({
           success: false,
-          message: "بيانات التحديث غير صحيحة",
+          message:
+            "بيانات التحديث غير صحيحة",
         });
       }
 
@@ -325,15 +399,18 @@ export async function PATCH(request: NextRequest) {
           where: {
             id,
           },
+
           data: {
             status,
           },
+
           include: {
             replies: {
               orderBy: {
                 createdAt: "desc",
               },
             },
+
             attachments: {
               orderBy: {
                 createdAt: "asc",
@@ -352,7 +429,8 @@ export async function PATCH(request: NextRequest) {
     // إرسال رد للمورد
     // ==================================================
 
-    const formData = await request.formData();
+    const formData =
+      await request.formData();
 
     const id = Number(
       formData.get("id")
@@ -365,7 +443,8 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({
         success: false,
-        message: "رقم الطلب غير صحيح",
+        message:
+          "رقم الطلب غير صحيح",
       });
     }
 
@@ -379,7 +458,8 @@ export async function PATCH(request: NextRequest) {
     if (!existingRequest) {
       return NextResponse.json({
         success: false,
-        message: "الطلب غير موجود",
+        message:
+          "الطلب غير موجود",
       });
     }
 
@@ -388,10 +468,14 @@ export async function PATCH(request: NextRequest) {
     // ==================================================
 
     const replyFiles =
-      formData.getAll("replyFiles");
+      formData.getAll(
+        "replyFiles"
+      );
 
     const oldReplyFile =
-      formData.get("replyFile");
+      formData.get(
+        "replyFile"
+      );
 
     const allReplyFiles: File[] = [];
 
@@ -408,59 +492,89 @@ export async function PATCH(request: NextRequest) {
       oldReplyFile instanceof File &&
       oldReplyFile.size > 0
     ) {
-      allReplyFiles.push(oldReplyFile);
-    }
-
-    let latestReplyFileUrl:
-      string | null = null;
-
-    // ==================================================
-    // لا يوجد ملف رد
-    // ==================================================
-
-    if (allReplyFiles.length === 0) {
-      await prisma.requestReply.create({
-        data: {
-          requestId: id,
-          reply: reply || null,
-          fileUrl: null,
-        },
-      });
+      allReplyFiles.push(
+        oldReplyFile
+      );
     }
 
     // ==================================================
-    // يوجد ملف أو أكثر
+    // رفع ملفات الرد
     // ==================================================
+
+    const savedReplyFiles: {
+      fileUrl: string;
+    }[] = [];
 
     for (
-      let i = 0;
-      i < allReplyFiles.length;
-      i++
+      const file of allReplyFiles
     ) {
-      const file = allReplyFiles[i];
+      const saved =
+        await saveFile(
+          file,
+          "replies"
+        );
 
-      const saved = await saveFile(
-        file,
-        "replies"
-      );
-
-      latestReplyFileUrl =
-        saved.fileUrl;
-
-      await prisma.requestReply.create({
-        data: {
-          requestId: id,
-          reply:
-            i === 0
-              ? reply || null
-              : null,
-          fileUrl: saved.fileUrl,
-        },
+      savedReplyFiles.push({
+        fileUrl:
+          saved.fileUrl,
       });
     }
 
     // ==================================================
-    // تحديث آخر رد
+    // إنشاء سجل الرد
+    // ==================================================
+
+    if (
+      savedReplyFiles.length === 0
+    ) {
+      await prisma.requestReply.create(
+        {
+          data: {
+            requestId: id,
+            reply:
+              reply || null,
+            fileUrl: null,
+          },
+        }
+      );
+    } else {
+      for (
+        let i = 0;
+        i < savedReplyFiles.length;
+        i++
+      ) {
+        await prisma.requestReply.create(
+          {
+            data: {
+              requestId: id,
+
+              reply:
+                i === 0
+                  ? reply || null
+                  : null,
+
+              fileUrl:
+                savedReplyFiles[i]
+                  .fileUrl,
+            },
+          }
+        );
+      }
+    }
+
+    // ==================================================
+    // آخر ملف رد
+    // ==================================================
+
+    const latestReplyFileUrl =
+      savedReplyFiles.length > 0
+        ? savedReplyFiles[
+            savedReplyFiles.length - 1
+          ].fileUrl
+        : null;
+
+    // ==================================================
+    // تحديث الطلب الرئيسي
     // ==================================================
 
     const updatedRequest =
@@ -468,19 +582,28 @@ export async function PATCH(request: NextRequest) {
         where: {
           id,
         },
+
         data: {
-          reply: reply || null,
+          reply:
+            reply || null,
+
           replyFileUrl:
             latestReplyFileUrl,
-          replyAt: new Date(),
-          status: "تم الرد",
+
+          replyAt:
+            new Date(),
+
+          status:
+            "تم الرد",
         },
+
         include: {
           replies: {
             orderBy: {
               createdAt: "desc",
             },
           },
+
           attachments: {
             orderBy: {
               createdAt: "asc",
@@ -491,19 +614,104 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "تم إرسال الرد بنجاح",
+
+      message:
+        "تم إرسال الرد بنجاح",
+
       data: updatedRequest,
     });
   } catch (error) {
-    console.error("PATCH REQUEST ERROR:", error);
+    console.error(
+      "PATCH REQUEST ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
+
         message:
           error instanceof Error
             ? error.message
             : "حدث خطأ أثناء تحديث الطلب",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+// ==================================================
+// DELETE
+// حذف الطلب وجميع المرفقات والردود المرتبطة
+// ==================================================
+
+export async function DELETE(
+  request: NextRequest
+) {
+  try {
+    const body =
+      await request.json();
+
+    const id = Number(body.id);
+
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        message:
+          "رقم الطلب غير صحيح",
+      });
+    }
+
+    const existingRequest =
+      await prisma.request.findUnique({
+        where: {
+          id,
+        },
+
+        include: {
+          attachments: true,
+          replies: true,
+        },
+      });
+
+    if (!existingRequest) {
+      return NextResponse.json({
+        success: false,
+        message:
+          "الطلب غير موجود",
+      });
+    }
+
+    // حذف الطلب
+    // العلاقات في Prisma عندك تستخدم Cascade
+    // لذلك سيتم حذف replies و attachments تلقائيًا
+    await prisma.request.delete({
+      where: {
+        id,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message:
+        "تم حذف الطلب وجميع البيانات المرتبطة به بنجاح",
+    });
+  } catch (error) {
+    console.error(
+      "DELETE REQUEST ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          error instanceof Error
+            ? error.message
+            : "حدث خطأ أثناء حذف الطلب",
       },
       {
         status: 500,
