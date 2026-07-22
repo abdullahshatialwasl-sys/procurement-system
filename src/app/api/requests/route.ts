@@ -4,10 +4,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 function safeFileName(fileName: string): string {
-  return fileName.replace(
-    /[^a-zA-Z0-9._-]/g,
-    "_"
-  );
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 async function saveFile(
@@ -23,38 +20,24 @@ async function saveFile(
     "uploads"
   );
 
-  await mkdir(
-    uploadDir,
-    {
-      recursive: true,
-    }
-  );
+  await mkdir(uploadDir, {
+    recursive: true,
+  });
 
-  const bytes =
-    await file.arrayBuffer();
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
 
-  const buffer =
-    Buffer.from(bytes);
-
-  const fileName =
-    safeFileName(file.name);
+  const originalFileName = safeFileName(file.name);
 
   const uniqueName =
-    prefix +
-    "-" +
-    Date.now() +
-    "-" +
-    Math.random()
+    `${prefix}-${Date.now()}-${Math.random()
       .toString(36)
-      .substring(2, 10) +
-    "-" +
-    fileName;
+      .substring(2, 10)}-${originalFileName}`;
 
-  const filePath =
-    path.join(
-      uploadDir,
-      uniqueName
-    );
+  const filePath = path.join(
+    uploadDir,
+    uniqueName
+  );
 
   await writeFile(
     filePath,
@@ -62,14 +45,14 @@ async function saveFile(
   );
 
   return {
-    fileUrl:
-      "/uploads/" +
-      uniqueName,
-
-    fileName:
-      file.name,
+    fileUrl: `/uploads/${uniqueName}`,
+    fileName: file.name,
   };
 }
+
+// ==================================================
+// GET
+// ==================================================
 
 export async function GET(
   request: NextRequest
@@ -81,15 +64,15 @@ export async function GET(
     const number =
       searchParams.get("number");
 
+    // البحث عن طلب محدد
     if (number) {
       const cleanNumber =
         number
           .trim()
           .toUpperCase()
-          .replace("PR-", "");
+          .replace(/^PR-/, "");
 
-      const id =
-        Number(cleanNumber);
+      const id = Number(cleanNumber);
 
       if (
         !id ||
@@ -110,14 +93,12 @@ export async function GET(
           include: {
             replies: {
               orderBy: {
-                createdAt:
-                  "desc",
+                createdAt: "desc",
               },
             },
             attachments: {
               orderBy: {
-                createdAt:
-                  "asc",
+                createdAt: "asc",
               },
             },
           },
@@ -133,28 +114,25 @@ export async function GET(
 
       return NextResponse.json({
         success: true,
-        data:
-          foundRequest,
+        data: foundRequest,
       });
     }
 
+    // جلب جميع الطلبات
     const requests =
       await prisma.request.findMany({
         orderBy: {
-          createdAt:
-            "desc",
+          createdAt: "desc",
         },
         include: {
           replies: {
             orderBy: {
-              createdAt:
-                "desc",
+              createdAt: "desc",
             },
           },
           attachments: {
             orderBy: {
-              createdAt:
-                "asc",
+              createdAt: "asc",
             },
           },
         },
@@ -162,10 +140,8 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data:
-        requests,
+      data: requests,
     });
-
   } catch (error) {
     console.error(
       "GET REQUESTS ERROR:",
@@ -185,6 +161,12 @@ export async function GET(
   }
 }
 
+// ==================================================
+// POST
+// إنشاء طلب جديد
+// رفع عدة ملفات
+// ==================================================
+
 export async function POST(
   request: NextRequest
 ) {
@@ -197,41 +179,41 @@ export async function POST(
         formData.get(
           "companyName"
         ) || ""
-      );
+      ).trim();
 
     const requestType =
       String(
         formData.get(
           "requestType"
         ) || ""
-      );
+      ).trim();
 
     const details =
       String(
         formData.get(
           "details"
         ) || ""
-      );
+      ).trim();
 
     const applicantName =
       String(
         formData.get(
           "applicantName"
         ) || ""
-      );
+      ).trim();
 
     const phone =
       String(
         formData.get(
           "phone"
         ) || ""
-      );
+      ).trim();
 
     if (
-      !companyName.trim() ||
-      !requestType.trim() ||
-      !applicantName.trim() ||
-      !phone.trim()
+      !companyName ||
+      !requestType ||
+      !applicantName ||
+      !phone
     ) {
       return NextResponse.json({
         success: false,
@@ -240,42 +222,36 @@ export async function POST(
       });
     }
 
+    // إنشاء الطلب
     const newRequest =
       await prisma.request.create({
         data: {
-          companyName:
-            companyName.trim(),
-
-          requestType:
-            requestType.trim(),
-
+          companyName,
+          requestType,
           details:
-            details.trim() ||
-            null,
-
-          applicantName:
-            applicantName.trim(),
-
-          phone:
-            phone.trim(),
-
-          status:
-            "جديد",
+            details || null,
+          applicantName,
+          phone,
+          status: "جديد",
         },
       });
+
+    // ==================================================
+    // جمع جميع الملفات
+    // ==================================================
 
     const files =
       formData.getAll(
         "files"
       );
 
+    // دعم اسم الملف القديم
     const oldFile =
       formData.get(
         "file"
       );
 
-    const allFiles: File[] =
-      [];
+    const allFiles: File[] = [];
 
     for (
       const item of files
@@ -284,9 +260,7 @@ export async function POST(
         item instanceof File &&
         item.size > 0
       ) {
-        allFiles.push(
-          item
-        );
+        allFiles.push(item);
       }
     }
 
@@ -294,10 +268,12 @@ export async function POST(
       oldFile instanceof File &&
       oldFile.size > 0
     ) {
-      allFiles.push(
-        oldFile
-      );
+      allFiles.push(oldFile);
     }
+
+    // ==================================================
+    // حفظ جميع الملفات
+    // ==================================================
 
     for (
       const file of allFiles
@@ -322,34 +298,41 @@ export async function POST(
       });
     }
 
+    // ==================================================
+    // إعادة الطلب مع المرفقات
+    // ==================================================
+
     const finalRequest =
       await prisma.request.findUnique({
         where: {
-          id:
-            newRequest.id,
+          id: newRequest.id,
         },
         include: {
           attachments: {
             orderBy: {
-              createdAt:
-                "asc",
+              createdAt: "asc",
             },
           },
           replies: {
             orderBy: {
-              createdAt:
-                "desc",
+              createdAt: "desc",
             },
           },
         },
       });
 
+    // ==================================================
+    // رسالة نجاح واضحة للمورد
+    // ==================================================
+
     return NextResponse.json({
       success: true,
-      data:
-        finalRequest,
-    });
 
+      message:
+        "تم استلام طلبكم بنجاح",
+
+      data: finalRequest,
+    });
   } catch (error) {
     console.error(
       "POST REQUEST ERROR:",
@@ -369,6 +352,11 @@ export async function POST(
   }
 }
 
+// ==================================================
+// PATCH
+// تحديث الحالة أو إرسال رد
+// ==================================================
+
 export async function PATCH(
   request: NextRequest
 ) {
@@ -377,6 +365,10 @@ export async function PATCH(
       request.headers.get(
         "content-type"
       ) || "";
+
+    // ==================================================
+    // تحديث حالة الطلب
+    // ==================================================
 
     if (
       contentType.includes(
@@ -392,7 +384,7 @@ export async function PATCH(
       const status =
         String(
           body.status || ""
-        );
+        ).trim();
 
       if (
         !id ||
@@ -416,14 +408,12 @@ export async function PATCH(
           include: {
             replies: {
               orderBy: {
-                createdAt:
-                  "desc",
+                createdAt: "desc",
               },
             },
             attachments: {
               orderBy: {
-                createdAt:
-                  "asc",
+                createdAt: "asc",
               },
             },
           },
@@ -431,10 +421,13 @@ export async function PATCH(
 
       return NextResponse.json({
         success: true,
-        data:
-          updatedRequest,
+        data: updatedRequest,
       });
     }
+
+    // ==================================================
+    // إرسال رد للمورد
+    // ==================================================
 
     const formData =
       await request.formData();
@@ -451,7 +444,7 @@ export async function PATCH(
         formData.get(
           "reply"
         ) || ""
-      );
+      ).trim();
 
     if (!id) {
       return NextResponse.json({
@@ -476,6 +469,10 @@ export async function PATCH(
       });
     }
 
+    // ==================================================
+    // جمع ملفات الرد
+    // ==================================================
+
     const replyFiles =
       formData.getAll(
         "replyFiles"
@@ -486,8 +483,7 @@ export async function PATCH(
         "replyFile"
       );
 
-    const allReplyFiles: File[] =
-      [];
+    const allReplyFiles: File[] = [];
 
     for (
       const item of replyFiles
@@ -496,9 +492,7 @@ export async function PATCH(
         item instanceof File &&
         item.size > 0
       ) {
-        allReplyFiles.push(
-          item
-        );
+        allReplyFiles.push(item);
       }
     }
 
@@ -514,29 +508,32 @@ export async function PATCH(
     let latestReplyFileUrl:
       string | null = null;
 
+    // ==================================================
+    // لا يوجد ملف
+    // ==================================================
+
     if (
-      allReplyFiles.length ===
-      0
+      allReplyFiles.length === 0
     ) {
       await prisma.requestReply.create({
         data: {
-          requestId:
-            id,
+          requestId: id,
 
           reply:
-            reply.trim() ||
-            null,
+            reply || null,
 
-          fileUrl:
-            null,
+          fileUrl: null,
         },
       });
     }
 
+    // ==================================================
+    // يوجد ملف أو أكثر
+    // ==================================================
+
     for (
       let i = 0;
-      i <
-      allReplyFiles.length;
+      i < allReplyFiles.length;
       i++
     ) {
       const file =
@@ -553,13 +550,11 @@ export async function PATCH(
 
       await prisma.requestReply.create({
         data: {
-          requestId:
-            id,
+          requestId: id,
 
           reply:
             i === 0
-              ? reply.trim() ||
-                null
+              ? reply || null
               : null,
 
           fileUrl:
@@ -568,6 +563,10 @@ export async function PATCH(
       });
     }
 
+    // ==================================================
+    // تحديث آخر رد
+    // ==================================================
+
     const updatedRequest =
       await prisma.request.update({
         where: {
@@ -575,8 +574,7 @@ export async function PATCH(
         },
         data: {
           reply:
-            reply.trim() ||
-            null,
+            reply || null,
 
           replyFileUrl:
             latestReplyFileUrl,
@@ -590,14 +588,12 @@ export async function PATCH(
         include: {
           replies: {
             orderBy: {
-              createdAt:
-                "desc",
+              createdAt: "desc",
             },
           },
           attachments: {
             orderBy: {
-              createdAt:
-                "asc",
+              createdAt: "asc",
             },
           },
         },
@@ -605,10 +601,12 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      data:
-        updatedRequest,
-    });
 
+      message:
+        "تم إرسال الرد بنجاح",
+
+      data: updatedRequest,
+    });
   } catch (error) {
     console.error(
       "PATCH REQUEST ERROR:",
