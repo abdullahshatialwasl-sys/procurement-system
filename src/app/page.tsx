@@ -98,6 +98,20 @@ export default function Home() {
     );
   }
 
+  function handlePhoneChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const value = e.target.value;
+
+    const numbersOnly =
+      value.replace(/\D/g, "");
+
+    const limitedNumber =
+      numbersOnly.slice(0, 10);
+
+    setPhone(limitedNumber);
+  }
+
   async function sendRequest() {
     if (!companyName.trim()) {
       alert(
@@ -125,6 +139,13 @@ export default function Home() {
     if (!phone.trim()) {
       alert(
         "يرجى كتابة رقم الجوال"
+      );
+      return;
+    }
+
+    if (!/^05\d{8}$/.test(phone)) {
+      alert(
+        "يرجى إدخال رقم جوال سعودي صحيح مكون من 10 أرقام ويبدأ بـ 05"
       );
       return;
     }
@@ -271,10 +292,6 @@ export default function Home() {
 
       <div className="bg-white w-full max-w-6xl rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 border-2 border-[#37358A]/20 relative">
 
-        {/* ================================
-            الهيدر
-        ================================= */}
-
         <div className="flex flex-col items-center mb-7 sm:mb-10">
 
           <img
@@ -293,14 +310,7 @@ export default function Home() {
 
         </div>
 
-
-        {/* ================================
-            نموذج الطلب
-        ================================= */}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 md:gap-6">
-
-          {/* اسم الشركة */}
 
           <div className="md:col-span-2">
 
@@ -320,9 +330,6 @@ export default function Home() {
             />
 
           </div>
-
-
-          {/* الخدمات */}
 
           <div className="md:col-span-2">
 
@@ -372,9 +379,6 @@ export default function Home() {
 
           </div>
 
-
-          {/* التفاصيل */}
-
           <div className="md:col-span-2">
 
             <label className="block mb-2 sm:mb-3 font-bold text-sm sm:text-base text-[#37358A]">
@@ -394,9 +398,6 @@ export default function Home() {
 
           </div>
 
-
-          {/* اسم مقدم الطلب */}
-
           <div>
 
             <input
@@ -412,31 +413,26 @@ export default function Home() {
 
           </div>
 
-
-          {/* رقم الجوال */}
-
           <div>
 
             <input
               type="tel"
-              inputMode="tel"
+              inputMode="numeric"
               dir="ltr"
+              maxLength={10}
               value={phone}
-              onChange={(e) =>
-                setPhone(
-                  e.target.value
-                )
+              onChange={
+                handlePhoneChange
               }
-              placeholder="رقم الجوال"
-              className={`${inputStyle} text-right`}
+              placeholder="05xxxxxxxx"
+              className={`${inputStyle} text-left`}
             />
 
+            <p className="mt-2 text-xs sm:text-sm text-gray-500 text-right">
+              يجب أن يتكون رقم الجوال من 10 أرقام ويبدأ بـ 05
+            </p>
+
           </div>
-
-
-          {/* ================================
-              مرفقات المورد
-          ================================= */}
 
           <div className="md:col-span-2">
 
@@ -459,9 +455,6 @@ export default function Home() {
               الملفات المسموحة:
               PDF - Excel - JPG - JPEG - PNG
             </p>
-
-
-            {/* قائمة الملفات */}
 
             {requestFiles.length > 0 && (
 
@@ -523,9 +516,6 @@ export default function Home() {
 
           </div>
 
-
-          {/* زر الإرسال */}
-
           <div className="md:col-span-2">
 
             <button
@@ -542,9 +532,6 @@ export default function Home() {
 
           </div>
 
-
-          {/* رسالة الإرسال */}
-
           {message && (
 
             <div className="md:col-span-2">
@@ -556,11 +543,6 @@ export default function Home() {
             </div>
 
           )}
-
-
-          {/* ================================
-              رقم الطلب ورسالة التأكيد
-          ================================= */}
 
           {submittedRequestNumber && (
 
@@ -614,11 +596,6 @@ export default function Home() {
 
           )}
 
-
-          {/* ================================
-              متابعة الطلب
-          ================================= */}
-
           <div className="md:col-span-2 mt-6 sm:mt-8 md:mt-10 border-2 border-[#37358A]/20 rounded-2xl p-4 sm:p-5 md:p-6">
 
             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#37358A] mb-4 sm:mb-5">
@@ -645,9 +622,6 @@ export default function Home() {
               بحث عن الطلب
             </button>
 
-
-            {/* نتيجة البحث */}
-
             {searchResult && (
 
               <div className="mt-5 sm:mt-6 bg-blue-50 rounded-xl p-4 sm:p-6 border text-black overflow-hidden">
@@ -665,9 +639,6 @@ export default function Home() {
                   {searchResult.status}
                 </p>
 
-
-                {/* رد قسم المشتريات */}
-
                 <div className="mt-4 sm:mt-5 bg-white rounded-xl p-4 sm:p-5 border">
 
                   <h3 className="font-bold text-[#37358A] text-base sm:text-lg">
@@ -680,9 +651,6 @@ export default function Home() {
                   </p>
 
                 </div>
-
-
-                {/* مرفق قسم المشتريات */}
 
                 {searchResult.replyFileUrl && (
 
@@ -706,50 +674,6 @@ export default function Home() {
                   </div>
 
                 )}
-
-
-                {/* مرفقات الطلب */}
-
-                {searchResult.attachments &&
-                  searchResult.attachments.length >
-                    0 && (
-
-                    <div className="mt-4 sm:mt-5 bg-white rounded-xl p-4 sm:p-5 border">
-
-                      <h3 className="font-bold text-[#37358A] text-sm sm:text-base">
-                        المرفقات المرسلة
-                      </h3>
-
-                      <div className="mt-3 space-y-2">
-
-                        {searchResult.attachments.map(
-                          (file) => (
-
-                            <a
-                              key={
-                                file.id
-                              }
-                              href={
-                                file.fileUrl
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block text-blue-600 font-bold underline text-sm sm:text-base break-all"
-                            >
-                              📎{" "}
-                              {
-                                file.fileName
-                              }
-                            </a>
-
-                          )
-                        )}
-
-                      </div>
-
-                    </div>
-
-                  )}
 
               </div>
 
