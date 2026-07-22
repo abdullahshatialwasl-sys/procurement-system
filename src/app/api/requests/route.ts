@@ -17,16 +17,42 @@ const allowedTypes = [
 ];
 
 // ==================================================
-// تنظيف اسم الملف
+// إنشاء اسم ملف آمن لـ Supabase Storage
+// لا يعتمد على اسم الملف الأصلي
 // ==================================================
 
-function sanitizeFileName(fileName: string) {
-  return fileName
-    .replace(
-      /[^a-zA-Z0-9.\u0600-\u06FF_-]/g,
-      "_"
-    )
-    .replace(/_+/g, "_");
+function createSafeFileName(
+  prefix: string,
+  extension: string
+) {
+  const safeExtension =
+    extension
+      .replace(".", "")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase() || "file";
+
+  const randomId = Math.random()
+    .toString(36)
+    .substring(2, 10);
+
+  return `${prefix}-${Date.now()}-${randomId}.${safeExtension}`;
+}
+
+// ==================================================
+// الحصول على امتداد الملف
+// ==================================================
+
+function getFileExtension(fileName: string) {
+  const lastDotIndex =
+    fileName.lastIndexOf(".");
+
+  if (lastDotIndex === -1) {
+    return "file";
+  }
+
+  return fileName.substring(
+    lastDotIndex + 1
+  );
 }
 
 // ==================================================
@@ -38,23 +64,26 @@ async function uploadFile(
   folder: string,
   fileName: string
 ) {
-  const bytes = await file.arrayBuffer();
+  const bytes =
+    await file.arrayBuffer();
 
-  const filePath = `${folder}/${fileName}`;
+  const filePath =
+    `${folder}/${fileName}`;
 
-  const { error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(
-      filePath,
-      Buffer.from(bytes),
-      {
-        contentType:
-          file.type ||
-          "application/octet-stream",
+  const { error } =
+    await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(
+        filePath,
+        Buffer.from(bytes),
+        {
+          contentType:
+            file.type ||
+            "application/octet-stream",
 
-        upsert: false,
-      }
-    );
+          upsert: false,
+        }
+      );
 
   if (error) {
     console.error(
@@ -81,7 +110,9 @@ async function uploadFile(
 // GET
 // ==================================================
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request
+) {
   try {
     const { searchParams } =
       new URL(request.url);
@@ -112,19 +143,21 @@ export async function GET(request: Request) {
       }
 
       const requestData =
-        await prisma.request.findUnique({
-          where: {
-            id,
-          },
+        await prisma.request.findUnique(
+          {
+            where: {
+              id,
+            },
 
-          include: {
-            replies: {
-              orderBy: {
-                createdAt: "desc",
+            include: {
+              replies: {
+                orderBy: {
+                  createdAt: "desc",
+                },
               },
             },
-          },
-        });
+          }
+        );
 
       if (!requestData) {
         return NextResponse.json(
@@ -148,19 +181,21 @@ export async function GET(request: Request) {
     // ==================================================
 
     const requests =
-      await prisma.request.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
+      await prisma.request.findMany(
+        {
+          orderBy: {
+            createdAt: "desc",
+          },
 
-        include: {
-          replies: {
-            orderBy: {
-              createdAt: "desc",
+          include: {
+            replies: {
+              orderBy: {
+                createdAt: "desc",
+              },
             },
           },
-        },
-      });
+        }
+      );
 
     return NextResponse.json({
       success: true,
@@ -204,6 +239,7 @@ export async function POST(
     let details = "";
     let applicantName = "";
     let phone = "";
+
     let fileUrl:
       | string
       | null = null;
@@ -246,8 +282,9 @@ export async function POST(
         );
 
       phone = String(
-        formData.get("phone") ||
-          ""
+        formData.get(
+          "phone"
+        ) || ""
       );
 
       const file =
@@ -261,6 +298,7 @@ export async function POST(
         file instanceof File &&
         file.size > 0
       ) {
+        // التأكد من نوع الملف
         if (
           !allowedTypes.includes(
             file.type
@@ -276,14 +314,20 @@ export async function POST(
           );
         }
 
-        const originalName =
-          sanitizeFileName(
+        // الحصول على امتداد الملف الأصلي
+        const extension =
+          getFileExtension(
             file.name
           );
 
+        // إنشاء اسم إنجليزي آمن
         const fileName =
-          `request-${Date.now()}-${originalName}`;
+          createSafeFileName(
+            "request",
+            extension
+          );
 
+        // رفع الملف
         fileUrl =
           await uploadFile(
             file,
@@ -315,8 +359,7 @@ export async function POST(
         body.phone || "";
 
       fileUrl =
-        body.fileUrl ||
-        null;
+        body.fileUrl || null;
     }
 
     // ==================================================
@@ -324,20 +367,22 @@ export async function POST(
     // ==================================================
 
     const newRequest =
-      await prisma.request.create({
-        data: {
-          companyName,
-          requestType,
-          details,
-          applicantName,
-          phone,
-          fileUrl,
-        },
+      await prisma.request.create(
+        {
+          data: {
+            companyName,
+            requestType,
+            details,
+            applicantName,
+            phone,
+            fileUrl,
+          },
 
-        include: {
-          replies: true,
-        },
-      });
+          include: {
+            replies: true,
+          },
+        }
+      );
 
     return NextResponse.json({
       success: true,
@@ -457,6 +502,7 @@ export async function PATCH(
         file instanceof File &&
         file.size > 0
       ) {
+        // التأكد من نوع الملف
         if (
           !allowedTypes.includes(
             file.type
@@ -472,14 +518,20 @@ export async function PATCH(
           );
         }
 
-        const originalName =
-          sanitizeFileName(
+        // الحصول على امتداد الملف الأصلي
+        const extension =
+          getFileExtension(
             file.name
           );
 
+        // إنشاء اسم إنجليزي آمن
         const fileName =
-          `reply-${id}-${Date.now()}-${originalName}`;
+          createSafeFileName(
+            `reply-${id}`,
+            extension
+          );
 
+        // رفع الملف
         replyFileUrl =
           await uploadFile(
             file,
@@ -510,50 +562,54 @@ export async function PATCH(
       // حفظ الرد في سجل الردود
       // ==================================================
 
-      await prisma.requestReply.create({
-        data: {
-          requestId: id,
+      await prisma.requestReply.create(
+        {
+          data: {
+            requestId: id,
 
-          reply:
-            replyText || null,
+            reply:
+              replyText || null,
 
-          fileUrl:
-            replyFileUrl,
-        },
-      });
+            fileUrl:
+              replyFileUrl,
+          },
+        }
+      );
 
       // ==================================================
       // تحديث الطلب الرئيسي
       // ==================================================
 
       const updatedRequest =
-        await prisma.request.update({
-          where: {
-            id,
-          },
+        await prisma.request.update(
+          {
+            where: {
+              id,
+            },
 
-          data: {
-            status:
-              "تم الرد",
+            data: {
+              status:
+                "تم الرد",
 
-            reply:
-              replyText || null,
+              reply:
+                replyText || null,
 
-            replyFileUrl:
-              replyFileUrl,
+              replyFileUrl:
+                replyFileUrl,
 
-            replyAt:
-              new Date(),
-          },
+              replyAt:
+                new Date(),
+            },
 
-          include: {
-            replies: {
-              orderBy: {
-                createdAt: "desc",
+            include: {
+              replies: {
+                orderBy: {
+                  createdAt: "desc",
+                },
               },
             },
-          },
-        });
+          }
+        );
 
       return NextResponse.json({
         success: true,
@@ -586,27 +642,29 @@ export async function PATCH(
     }
 
     const updatedRequest =
-      await prisma.request.update({
-        where: {
-          id,
-        },
+      await prisma.request.update(
+        {
+          where: {
+            id,
+          },
 
-        data: {
-          status:
-            body.status !==
-            undefined
-              ? body.status
-              : undefined,
-        },
+          data: {
+            status:
+              body.status !==
+              undefined
+                ? body.status
+                : undefined,
+          },
 
-        include: {
-          replies: {
-            orderBy: {
-              createdAt: "desc",
+          include: {
+            replies: {
+              orderBy: {
+                createdAt: "desc",
+              },
             },
           },
-        },
-      });
+        }
+      );
 
     return NextResponse.json({
       success: true,
