@@ -323,7 +323,7 @@ export default function Home() {
         <div className="flex flex-col items-center mb-7 sm:mb-10">
 
           <img
-            src="/images/nma-logo.jpeg"
+            src="/images/nma-logo.png"
             alt="logo"
             className="w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 lg:w-40 lg:h-40 object-contain"
           />
