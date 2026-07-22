@@ -20,15 +20,14 @@ model Request {
   fileUrl       String?
   status        String  @default("جديد")
 
-  // آخر رد
   reply        String?
   replyFileUrl String?
   replyAt      DateTime?
 
-  // جميع الردود السابقة
   replies RequestReply[]
 
-  // تاريخ إنشاء الطلب
+  attachments RequestAttachment[]
+
   createdAt DateTime @default(now())
 }
 
@@ -40,5 +39,16 @@ model RequestReply {
 
   reply     String?
   fileUrl   String?
+  createdAt DateTime @default(now())
+}
+
+model RequestAttachment {
+  id        Int @id @default(autoincrement())
+  requestId Int
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  fileUrl   String
+  fileName  String
   createdAt DateTime @default(now())
 }

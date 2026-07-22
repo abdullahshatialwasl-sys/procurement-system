@@ -1,116 +1,78 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { supabase } from "@/lib/supabase";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 
-// ==================================================
-// إعدادات الملفات
-// ==================================================
-
-const BUCKET_NAME = "uploads";
-
-const allowedTypes = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-excel",
-  "image/jpeg",
-  "image/png",
-];
-
-// ==================================================
-// إنشاء اسم ملف آمن لـ Supabase Storage
-// ==================================================
-
-function createSafeFileName(
-  prefix: string,
-  extension: string
-) {
-  const safeExtension =
-    extension
-      .replace(".", "")
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .toLowerCase() || "file";
-
-  const randomId = Math.random()
-    .toString(36)
-    .substring(2, 10);
-
-  return `${prefix}-${Date.now()}-${randomId}.${safeExtension}`;
-}
-
-// ==================================================
-// الحصول على امتداد الملف
-// ==================================================
-
-function getFileExtension(fileName: string) {
-  const lastDotIndex =
-    fileName.lastIndexOf(".");
-
-  if (lastDotIndex === -1) {
-    return "file";
-  }
-
-  return fileName.substring(
-    lastDotIndex + 1
+function safeFileName(fileName: string): string {
+  return fileName.replace(
+    /[^a-zA-Z0-9._-]/g,
+    "_"
   );
 }
 
-// ==================================================
-// رفع الملف إلى Supabase Storage
-// ==================================================
-
-async function uploadFile(
+async function saveFile(
   file: File,
-  folder: string,
-  fileName: string
-) {
+  prefix: string
+): Promise<{
+  fileUrl: string;
+  fileName: string;
+}> {
+  const uploadDir = path.join(
+    process.cwd(),
+    "public",
+    "uploads"
+  );
+
+  await mkdir(
+    uploadDir,
+    {
+      recursive: true,
+    }
+  );
+
   const bytes =
     await file.arrayBuffer();
 
+  const buffer =
+    Buffer.from(bytes);
+
+  const fileName =
+    safeFileName(file.name);
+
+  const uniqueName =
+    prefix +
+    "-" +
+    Date.now() +
+    "-" +
+    Math.random()
+      .toString(36)
+      .substring(2, 10) +
+    "-" +
+    fileName;
+
   const filePath =
-    `${folder}/${fileName}`;
-
-  const { error } =
-    await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(
-        filePath,
-        Buffer.from(bytes),
-        {
-          contentType:
-            file.type ||
-            "application/octet-stream",
-
-          upsert: false,
-        }
-      );
-
-  if (error) {
-    console.error(
-      "SUPABASE STORAGE UPLOAD ERROR:",
-      error
+    path.join(
+      uploadDir,
+      uniqueName
     );
 
-    throw new Error(
-      `فشل رفع الملف: ${error.message}`
-    );
-  }
+  await writeFile(
+    filePath,
+    buffer
+  );
 
-  const {
-    data: publicUrlData,
-  } =
-    supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filePath);
+  return {
+    fileUrl:
+      "/uploads/" +
+      uniqueName,
 
-  return publicUrlData.publicUrl;
+    fileName:
+      file.name,
+  };
 }
 
-// ==================================================
-// GET
-// ==================================================
-
 export async function GET(
-  request: Request
+  request: NextRequest
 ) {
   try {
     const { searchParams } =
@@ -119,90 +81,94 @@ export async function GET(
     const number =
       searchParams.get("number");
 
-    // ==================================================
-    // جلب طلب محدد
-    // ==================================================
-
     if (number) {
-      const id = Number(
+      const cleanNumber =
         number
-          .replace("PR-", "")
           .trim()
-      );
+          .toUpperCase()
+          .replace("PR-", "");
 
-      if (isNaN(id)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "رقم الطلب غير صحيح",
-          },
-          { status: 400 }
-        );
+      const id =
+        Number(cleanNumber);
+
+      if (
+        !id ||
+        Number.isNaN(id)
+      ) {
+        return NextResponse.json({
+          success: false,
+          message:
+            "رقم الطلب غير صحيح",
+        });
       }
 
-      const requestData =
-        await prisma.request.findUnique(
-          {
-            where: {
-              id,
-            },
-
-            include: {
-              replies: {
-                orderBy: {
-                  createdAt: "desc",
-                },
+      const foundRequest =
+        await prisma.request.findUnique({
+          where: {
+            id,
+          },
+          include: {
+            replies: {
+              orderBy: {
+                createdAt:
+                  "desc",
               },
             },
-          }
-        );
-
-      if (!requestData) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "لم يتم العثور على الطلب",
+            attachments: {
+              orderBy: {
+                createdAt:
+                  "asc",
+              },
+            },
           },
-          { status: 404 }
-        );
+        });
+
+      if (!foundRequest) {
+        return NextResponse.json({
+          success: false,
+          message:
+            "لم يتم العثور على الطلب",
+        });
       }
 
       return NextResponse.json({
         success: true,
-        data: requestData,
+        data:
+          foundRequest,
       });
     }
 
-    // ==================================================
-    // جلب جميع الطلبات
-    // ==================================================
-
     const requests =
-      await prisma.request.findMany(
-        {
-          orderBy: {
-            createdAt: "desc",
-          },
-
-          include: {
-            replies: {
-              orderBy: {
-                createdAt: "desc",
-              },
+      await prisma.request.findMany({
+        orderBy: {
+          createdAt:
+            "desc",
+        },
+        include: {
+          replies: {
+            orderBy: {
+              createdAt:
+                "desc",
             },
           },
-        }
-      );
+          attachments: {
+            orderBy: {
+              createdAt:
+                "asc",
+            },
+          },
+        },
+      });
 
     return NextResponse.json({
       success: true,
-      data: requests,
+      data:
+        requests,
     });
+
   } catch (error) {
     console.error(
-      "GET REQUEST ERROR:",
+      "GET REQUESTS ERROR:",
       error
     );
 
@@ -210,179 +176,180 @@ export async function GET(
       {
         success: false,
         message:
-          error instanceof Error
-            ? error.message
-            : "خطأ في جلب الطلبات",
+          "حدث خطأ أثناء جلب الطلبات",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// ==================================================
-// POST
-// إنشاء طلب جديد
-// ==================================================
-
 export async function POST(
-  request: Request
+  request: NextRequest
 ) {
   try {
-    const contentType =
-      request.headers.get(
-        "content-type"
-      ) || "";
+    const formData =
+      await request.formData();
 
-    let companyName = "";
-    let requestType = "";
-    let details = "";
-    let applicantName = "";
-    let phone = "";
-
-    let fileUrl:
-      | string
-      | null = null;
-
-    // ==================================================
-    // طلب يحتوي على ملف
-    // ==================================================
-
-    if (
-      contentType.includes(
-        "multipart/form-data"
-      )
-    ) {
-      const formData =
-        await request.formData();
-
-      companyName = String(
+    const companyName =
+      String(
         formData.get(
           "companyName"
         ) || ""
       );
 
-      requestType = String(
+    const requestType =
+      String(
         formData.get(
           "requestType"
         ) || ""
       );
 
-      details = String(
+    const details =
+      String(
         formData.get(
           "details"
         ) || ""
       );
 
-      applicantName =
-        String(
-          formData.get(
-            "applicantName"
-          ) || ""
-        );
+    const applicantName =
+      String(
+        formData.get(
+          "applicantName"
+        ) || ""
+      );
 
-      phone = String(
+    const phone =
+      String(
         formData.get(
           "phone"
         ) || ""
       );
 
-      const file =
-        formData.get("file");
-
-      // ==================================================
-      // رفع الملف إلى Supabase
-      // ==================================================
-
-      if (
-        file instanceof File &&
-        file.size > 0
-      ) {
-        if (
-          !allowedTypes.includes(
-            file.type
-          )
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "نوع الملف غير مسموح. يسمح فقط PDF وExcel والصور JPG وPNG",
-            },
-            { status: 400 }
-          );
-        }
-
-        const extension =
-          getFileExtension(
-            file.name
-          );
-
-        const fileName =
-          createSafeFileName(
-            "request",
-            extension
-          );
-
-        fileUrl =
-          await uploadFile(
-            file,
-            "requests",
-            fileName
-          );
-      }
-    } else {
-      // ==================================================
-      // طلب بدون ملف
-      // ==================================================
-
-      const body =
-        await request.json();
-
-      companyName =
-        body.companyName || "";
-
-      requestType =
-        body.requestType || "";
-
-      details =
-        body.details || "";
-
-      applicantName =
-        body.applicantName || "";
-
-      phone =
-        body.phone || "";
-
-      fileUrl =
-        body.fileUrl || null;
+    if (
+      !companyName.trim() ||
+      !requestType.trim() ||
+      !applicantName.trim() ||
+      !phone.trim()
+    ) {
+      return NextResponse.json({
+        success: false,
+        message:
+          "يرجى تعبئة جميع الحقول المطلوبة",
+      });
     }
 
-    // ==================================================
-    // حفظ الطلب في قاعدة البيانات
-    // ==================================================
-
     const newRequest =
-      await prisma.request.create(
-        {
-          data: {
-            companyName,
-            requestType,
-            details,
-            applicantName,
-            phone,
-            fileUrl,
-          },
+      await prisma.request.create({
+        data: {
+          companyName:
+            companyName.trim(),
 
-          include: {
-            replies: true,
-          },
-        }
+          requestType:
+            requestType.trim(),
+
+          details:
+            details.trim() ||
+            null,
+
+          applicantName:
+            applicantName.trim(),
+
+          phone:
+            phone.trim(),
+
+          status:
+            "جديد",
+        },
+      });
+
+    const files =
+      formData.getAll(
+        "files"
       );
+
+    const oldFile =
+      formData.get(
+        "file"
+      );
+
+    const allFiles: File[] =
+      [];
+
+    for (
+      const item of files
+    ) {
+      if (
+        item instanceof File &&
+        item.size > 0
+      ) {
+        allFiles.push(
+          item
+        );
+      }
+    }
+
+    if (
+      oldFile instanceof File &&
+      oldFile.size > 0
+    ) {
+      allFiles.push(
+        oldFile
+      );
+    }
+
+    for (
+      const file of allFiles
+    ) {
+      const saved =
+        await saveFile(
+          file,
+          "request"
+        );
+
+      await prisma.requestAttachment.create({
+        data: {
+          requestId:
+            newRequest.id,
+
+          fileUrl:
+            saved.fileUrl,
+
+          fileName:
+            saved.fileName,
+        },
+      });
+    }
+
+    const finalRequest =
+      await prisma.request.findUnique({
+        where: {
+          id:
+            newRequest.id,
+        },
+        include: {
+          attachments: {
+            orderBy: {
+              createdAt:
+                "asc",
+            },
+          },
+          replies: {
+            orderBy: {
+              createdAt:
+                "desc",
+            },
+          },
+        },
+      });
 
     return NextResponse.json({
       success: true,
-      data: newRequest,
+      data:
+        finalRequest,
     });
+
   } catch (error) {
     console.error(
       "POST REQUEST ERROR:",
@@ -393,21 +360,17 @@ export async function POST(
       {
         success: false,
         message:
-          error instanceof Error
-            ? error.message
-            : "خطأ في حفظ الطلب أو رفع الملف",
+          "حدث خطأ أثناء إرسال الطلب",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// ==================================================
-// PATCH
-// ==================================================
-
 export async function PATCH(
-  request: Request
+  request: NextRequest
 ) {
   try {
     const contentType =
@@ -415,244 +378,237 @@ export async function PATCH(
         "content-type"
       ) || "";
 
-    // ==================================================
-    // إرسال رد من الأدمن
-    // ==================================================
-
     if (
       contentType.includes(
-        "multipart/form-data"
+        "application/json"
       )
     ) {
-      const formData =
-        await request.formData();
-
-      const idValue =
-        formData.get("id");
-
-      const replyValue =
-        formData.get("reply");
-
-      const file =
-        formData.get(
-          "replyFile"
-        );
+      const body =
+        await request.json();
 
       const id =
-        Number(idValue);
+        Number(body.id);
+
+      const status =
+        String(
+          body.status || ""
+        );
 
       if (
         !id ||
-        isNaN(id)
+        !status
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "رقم الطلب غير صحيح",
-          },
-          { status: 400 }
-        );
-      }
-
-      const existingRequest =
-        await prisma.request.findUnique(
-          {
-            where: {
-              id,
-            },
-          }
-        );
-
-      if (!existingRequest) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "الطلب غير موجود",
-          },
-          { status: 404 }
-        );
-      }
-
-      const replyText =
-        typeof replyValue ===
-        "string"
-          ? replyValue.trim()
-          : "";
-
-      let replyFileUrl:
-        | string
-        | null = null;
-
-      // ==================================================
-      // رفع ملف الرد
-      // ==================================================
-
-      if (
-        file instanceof File &&
-        file.size > 0
-      ) {
-        if (
-          !allowedTypes.includes(
-            file.type
-          )
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "نوع الملف غير مسموح. يسمح فقط PDF وExcel والصور JPG وPNG",
-            },
-            { status: 400 }
-          );
-        }
-
-        const extension =
-          getFileExtension(
-            file.name
-          );
-
-        const fileName =
-          createSafeFileName(
-            `reply-${id}`,
-            extension
-          );
-
-        replyFileUrl =
-          await uploadFile(
-            file,
-            "replies",
-            fileName
-          );
-      }
-
-      if (
-        !replyText &&
-        !replyFileUrl
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "يرجى كتابة الرد أو إرفاق ملف",
-          },
-          { status: 400 }
-        );
-      }
-
-      // ==================================================
-      // حفظ الرد في سجل الردود
-      // ==================================================
-
-      await prisma.requestReply.create(
-        {
-          data: {
-            requestId: id,
-
-            reply:
-              replyText || null,
-
-            fileUrl:
-              replyFileUrl,
-          },
-        }
-      );
-
-      // ==================================================
-      // تحديث الطلب الرئيسي
-      // ==================================================
-
-      const updatedRequest =
-        await prisma.request.update(
-          {
-            where: {
-              id,
-            },
-
-            data: {
-              status:
-                "تم الرد",
-
-              reply:
-                replyText || null,
-
-              replyFileUrl:
-                replyFileUrl,
-
-              replyAt:
-                new Date(),
-            },
-
-            include: {
-              replies: {
-                orderBy: {
-                  createdAt: "desc",
-                },
-              },
-            },
-          }
-        );
-
-      return NextResponse.json({
-        success: true,
-        data: updatedRequest,
-      });
-    }
-
-    // ==================================================
-    // تحديث الحالة فقط
-    // ==================================================
-
-    const body =
-      await request.json();
-
-    const id =
-      Number(body.id);
-
-    if (
-      !id ||
-      isNaN(id)
-    ) {
-      return NextResponse.json(
-        {
+        return NextResponse.json({
           success: false,
           message:
-            "رقم الطلب غير صحيح",
-        },
-        { status: 400 }
-      );
-    }
+            "بيانات التحديث غير صحيحة",
+        });
+      }
 
-    const updatedRequest =
-      await prisma.request.update(
-        {
+      const updatedRequest =
+        await prisma.request.update({
           where: {
             id,
           },
-
           data: {
-            status:
-              body.status !==
-              undefined
-                ? body.status
-                : undefined,
+            status,
           },
-
           include: {
             replies: {
               orderBy: {
-                createdAt: "desc",
+                createdAt:
+                  "desc",
+              },
+            },
+            attachments: {
+              orderBy: {
+                createdAt:
+                  "asc",
               },
             },
           },
-        }
+        });
+
+      return NextResponse.json({
+        success: true,
+        data:
+          updatedRequest,
+      });
+    }
+
+    const formData =
+      await request.formData();
+
+    const id =
+      Number(
+        formData.get(
+          "id"
+        )
       );
+
+    const reply =
+      String(
+        formData.get(
+          "reply"
+        ) || ""
+      );
+
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        message:
+          "رقم الطلب غير صحيح",
+      });
+    }
+
+    const existingRequest =
+      await prisma.request.findUnique({
+        where: {
+          id,
+        },
+      });
+
+    if (!existingRequest) {
+      return NextResponse.json({
+        success: false,
+        message:
+          "الطلب غير موجود",
+      });
+    }
+
+    const replyFiles =
+      formData.getAll(
+        "replyFiles"
+      );
+
+    const oldReplyFile =
+      formData.get(
+        "replyFile"
+      );
+
+    const allReplyFiles: File[] =
+      [];
+
+    for (
+      const item of replyFiles
+    ) {
+      if (
+        item instanceof File &&
+        item.size > 0
+      ) {
+        allReplyFiles.push(
+          item
+        );
+      }
+    }
+
+    if (
+      oldReplyFile instanceof File &&
+      oldReplyFile.size > 0
+    ) {
+      allReplyFiles.push(
+        oldReplyFile
+      );
+    }
+
+    let latestReplyFileUrl:
+      string | null = null;
+
+    if (
+      allReplyFiles.length ===
+      0
+    ) {
+      await prisma.requestReply.create({
+        data: {
+          requestId:
+            id,
+
+          reply:
+            reply.trim() ||
+            null,
+
+          fileUrl:
+            null,
+        },
+      });
+    }
+
+    for (
+      let i = 0;
+      i <
+      allReplyFiles.length;
+      i++
+    ) {
+      const file =
+        allReplyFiles[i];
+
+      const saved =
+        await saveFile(
+          file,
+          "reply"
+        );
+
+      latestReplyFileUrl =
+        saved.fileUrl;
+
+      await prisma.requestReply.create({
+        data: {
+          requestId:
+            id,
+
+          reply:
+            i === 0
+              ? reply.trim() ||
+                null
+              : null,
+
+          fileUrl:
+            saved.fileUrl,
+        },
+      });
+    }
+
+    const updatedRequest =
+      await prisma.request.update({
+        where: {
+          id,
+        },
+        data: {
+          reply:
+            reply.trim() ||
+            null,
+
+          replyFileUrl:
+            latestReplyFileUrl,
+
+          replyAt:
+            new Date(),
+
+          status:
+            "تم الرد",
+        },
+        include: {
+          replies: {
+            orderBy: {
+              createdAt:
+                "desc",
+            },
+          },
+          attachments: {
+            orderBy: {
+              createdAt:
+                "asc",
+            },
+          },
+        },
+      });
 
     return NextResponse.json({
       success: true,
-      data: updatedRequest,
+      data:
+        updatedRequest,
     });
+
   } catch (error) {
     console.error(
       "PATCH REQUEST ERROR:",
@@ -663,112 +619,11 @@ export async function PATCH(
       {
         success: false,
         message:
-          error instanceof Error
-            ? error.message
-            : "خطأ غير معروف في تحديث الطلب",
+          "حدث خطأ أثناء تحديث الطلب",
       },
-      { status: 500 }
-    );
-  }
-}
-
-// ==================================================
-// DELETE
-// حذف طلب
-// ==================================================
-
-export async function DELETE(
-  request: Request
-) {
-  try {
-    const body =
-      await request.json();
-
-    const id =
-      Number(body.id);
-
-    if (
-      !id ||
-      isNaN(id)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "رقم الطلب غير صحيح",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ==================================================
-    // التأكد من وجود الطلب
-    // ==================================================
-
-    const existingRequest =
-      await prisma.request.findUnique(
-        {
-          where: {
-            id,
-          },
-
-          include: {
-            replies: true,
-          },
-        }
-      );
-
-    if (!existingRequest) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "الطلب غير موجود",
-        },
-        { status: 404 }
-      );
-    }
-
-    // ==================================================
-    // حذف الردود المرتبطة بالطلب أولاً
-    // ==================================================
-
-    await prisma.requestReply.deleteMany({
-      where: {
-        requestId: id,
-      },
-    });
-
-    // ==================================================
-    // حذف الطلب
-    // ==================================================
-
-    await prisma.request.delete({
-      where: {
-        id,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message:
-        "تم حذف الطلب بنجاح",
-    });
-  } catch (error) {
-    console.error(
-      "DELETE REQUEST ERROR:",
-      error
-    );
-
-    return NextResponse.json(
       {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "حدث خطأ أثناء حذف الطلب",
-      },
-      { status: 500 }
+        status: 500,
+      }
     );
   }
 }
