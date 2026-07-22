@@ -67,8 +67,8 @@ async function saveFile(
 
 // ==================================================
 // GET
-// جلب جميع الطلبات مع المرفقات والردود
-// أو البحث عن طلب برقم PR
+// جلب جميع الطلبات للأدمن مع المرفقات والردود
+// أو البحث عن طلب برقم PR للمورد
 // ==================================================
 
 export async function GET(
@@ -82,7 +82,8 @@ export async function GET(
       searchParams.get("number");
 
     // ==================================================
-    // البحث عن طلب محدد
+    // البحث عن طلب محدد للمورد
+    // لا يتم إرجاع attachments الخاصة بالمورد
     // ==================================================
 
     if (number) {
@@ -111,11 +112,6 @@ export async function GET(
                 createdAt: "desc",
               },
             },
-            attachments: {
-              orderBy: {
-                createdAt: "asc",
-              },
-            },
           },
         });
 
@@ -127,14 +123,31 @@ export async function GET(
         });
       }
 
+      // نرجع فقط البيانات التي يحتاجها المورد
+      // بدون attachments
       return NextResponse.json({
         success: true,
-        data: foundRequest,
+        data: {
+          id: foundRequest.id,
+          companyName:
+            foundRequest.companyName,
+          requestType:
+            foundRequest.requestType,
+          details:
+            foundRequest.details,
+          status:
+            foundRequest.status,
+          reply:
+            foundRequest.reply,
+          replyFileUrl:
+            foundRequest.replyFileUrl,
+        },
       });
     }
 
     // ==================================================
-    // جلب جميع الطلبات
+    // جلب جميع الطلبات للأدمن
+    // المرفقات تظهر للأدمن بشكل طبيعي
     // ==================================================
 
     const requests =
@@ -238,7 +251,6 @@ export async function POST(
 
     const allFiles: File[] = [];
 
-    // الملفات الجديدة باسم files
     for (const item of uploadedFiles) {
       if (
         item instanceof File &&
@@ -248,7 +260,6 @@ export async function POST(
       }
     }
 
-    // دعم اسم الملف القديم file
     if (
       oldFile instanceof File &&
       oldFile.size > 0
@@ -257,7 +268,7 @@ export async function POST(
     }
 
     // ==================================================
-    // رفع جميع الملفات إلى Supabase أولًا
+    // رفع جميع الملفات إلى Supabase
     // ==================================================
 
     const savedAttachments: {
@@ -275,7 +286,7 @@ export async function POST(
     }
 
     // ==================================================
-    // إنشاء الطلب مع المرفقات في نفس العملية
+    // إنشاء الطلب مع المرفقات
     // ==================================================
 
     const newRequest =
